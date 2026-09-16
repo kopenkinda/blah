@@ -37,6 +37,7 @@ final class Preferences {
     var microphonePriority: [Microphone] { didSet { save() } }
     var key: DictationKey { didSet { save() } }
     var cleanup: CleanupOptions { didSet { save() } }
+    var replacements: [TextReplacement] { didSet { save() } }
     var modelDirectory: String { didSet { save() } }
     var speechModel: String { didSet { save() } }
     var orbPosition: OrbPosition { didSet { save() } }
@@ -49,6 +50,7 @@ final class Preferences {
         var microphonePriority: [Microphone]?
         var key: DictationKey
         var cleanup: CleanupOptions
+        var replacements: [TextReplacement]?
         var modelDirectory: String
         var speechModel: String?
         var orbPosition: OrbPosition?
@@ -67,6 +69,7 @@ final class Preferences {
             speechModel = saved.speechModel ?? ModelFiles.speech
             key = saved.key
             cleanup = saved.cleanup
+            replacements = saved.replacements ?? []
             modelDirectory = saved.modelDirectory
             orbPosition = saved.orbPosition ?? .bottom
             // Migrate the original paired sound setting without resetting other preferences.
@@ -86,6 +89,7 @@ final class Preferences {
             speechModel = ModelFiles.speech
             key = .globe
             cleanup = CleanupOptions()
+            replacements = []
             orbPosition = .bottom
             startSound = .off
             stopSound = .off
@@ -97,7 +101,7 @@ final class Preferences {
     }
 
     private func save() {
-        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume)
+        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, replacements: replacements, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume)
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: "preferences")
         }

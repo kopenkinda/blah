@@ -14,6 +14,7 @@ A small native Swift dictation app for macOS 27, inspired by [Hex](https://githu
 - Left-click the menu bar icon to paste the last transcription or quit. Right-click for Settings.
 - In General, click your dictation key and press a replacement. Letters, numbers, and standalone modifiers work too. Choose models, formatting, orb position, and launch at login there.
 - Arrange microphones by priority. Blah uses the first available one, remembers disconnected microphones, and adds new ones at the bottom.
+- Add word or phrase corrections in Replacements, with Match case and Whole words options for each rule. Rules run from top to bottom after formatting, including when formatting is off or fails.
 - Browse, search, and copy previous dictations in Transcript History, including the original text before formatting.
 
 Enable Microphone, Input Monitoring, and Accessibility when prompted. The default key is Globe / Fn. Set "Press Globe key to" to "Do Nothing" in macOS Keyboard settings. A plain key such as P is reserved for dictation when pressed alone; combinations such as Command-P still work. Escape cancels key selection, and Caps Lock cannot be used for hold-to-dictate.

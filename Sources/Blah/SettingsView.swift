@@ -9,12 +9,13 @@ struct SettingsView: View {
     @State private var loginError: String?
 
     private enum Page: String, CaseIterable, Identifiable {
-        case general = "General", models = "Models", history = "Transcript History"
+        case general = "General", models = "Models", replacements = "Replacements", history = "Transcript History"
         var id: String { rawValue }
         var symbol: String {
             switch self {
             case .general: "gearshape"
             case .models: "cpu"
+            case .replacements: "text.badge.checkmark"
             case .history: "clock.arrow.circlepath"
             }
         }
@@ -32,6 +33,7 @@ struct SettingsView: View {
                 switch page ?? .general {
                 case .general: general
                 case .models: models
+                case .replacements: replacements
                 case .history: TranscriptHistoryView(controller: controller)
                 }
                 if let notice = controller.notice {
@@ -226,6 +228,41 @@ struct SettingsView: View {
                     OrbPositionPicker(selection: $preferences.orbPosition) { controller.previewOrb() }
                 }
                 Text("Appears on the display containing your pointer.").font(.caption).foregroundStyle(.secondary)
+            }
+        }.formStyle(.grouped)
+    }
+
+    private var replacements: some View {
+        @Bindable var preferences = controller.preferences
+        return Form {
+            Section {
+                Text("Replacements run after formatting, or on the original transcript when formatting is off or fails.")
+                    .foregroundStyle(.secondary)
+                ForEach($preferences.replacements) { $rule in
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("Find", text: $rule.find, prompt: Text("salute"))
+                        TextField("Replace with", text: $rule.replacement, prompt: Text("salut"))
+                        HStack {
+                            Toggle("Match case", isOn: $rule.matchCase)
+                            Toggle("Whole words", isOn: $rule.wholeWords)
+                            Spacer()
+                            Button(role: .destructive) {
+                                preferences.replacements.removeAll { $0.id == rule.id }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .help("Delete replacement")
+                            .accessibilityLabel("Delete replacement")
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                    .padding(.vertical, 6)
+                }
+                Button("Add replacement", systemImage: "plus") {
+                    preferences.replacements.append(TextReplacement())
+                }
+            } footer: {
+                Text("Rules apply from top to bottom. Replacement text is used exactly as typed. Turn off Whole words to match inside words. Empty Find fields are ignored. Changes save automatically and apply to the next dictation.")
             }
         }.formStyle(.grouped)
     }

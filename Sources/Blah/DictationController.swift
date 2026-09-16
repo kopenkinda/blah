@@ -66,6 +66,7 @@ final class DictationController {
     private struct Job {
         var samples: [Float]
         var cleanup: CleanupOptions
+        var replacements: [TextReplacement]
         var directory: String
         var speechModel: String
         var target: pid_t?
@@ -415,6 +416,7 @@ final class DictationController {
         let stopSound = activeStopSound
         let destination = target
         let cleanup = preferences.cleanup
+        let replacements = preferences.replacements
         let directory = preferences.modelDirectory
         let speechModel = preferences.speechModel
         endGesture()
@@ -435,7 +437,7 @@ final class DictationController {
                     notice = "Recording was too short. Hold the key a little longer."
                     return
                 }
-                jobs.append(Job(samples: samples, cleanup: cleanup, directory: directory, speechModel: speechModel, target: destination,
+                jobs.append(Job(samples: samples, cleanup: cleanup, replacements: replacements, directory: directory, speechModel: speechModel, target: destination,
                                 cancellation: cancellation))
                 queuedCount = jobs.count + (processing ? 1 : 0)
                 processQueue()
@@ -502,6 +504,7 @@ final class DictationController {
                         }
                     }
                     try job.cancellation.check()
+                    text = TextReplacement.apply(job.replacements, to: text)
                     stage = "Pasting"
                     lastRawTranscript = raw
                     lastTranscript = text
