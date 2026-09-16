@@ -15,7 +15,7 @@ enum TranscriptHistory {
 
     static let url = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Blah/history.jsonl")
-    private static let limit = 2_000
+    static let limit = 2_000
 
     static func load() throws -> [Entry] {
         try prepare()

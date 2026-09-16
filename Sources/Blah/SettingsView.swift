@@ -1,9 +1,12 @@
 import SwiftUI
+import ServiceManagement
 
 struct SettingsView: View {
     @Bindable var controller: DictationController
     @State private var page: Page? = .general
     @State private var library = ModelLibrary()
+    @State private var loginStatus = SMAppService.mainApp.status
+    @State private var loginError: String?
 
     private enum Page: String, CaseIterable, Identifiable {
         case general = "General", models = "Models", history = "Transcript History"
@@ -49,13 +52,37 @@ struct SettingsView: View {
     }
 
     private func refresh() {
+        loginStatus = SMAppService.mainApp.status
         controller.reloadHistory()
         library.refresh(directory: controller.preferences.modelDirectory)
+    }
+
+    private func setLaunchAtLogin(_ enabled: Bool) {
+        loginError = nil
+        do {
+            if enabled { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+        } catch {
+            loginError = "Could not change launch at login. \(error.localizedDescription)"
+        }
+        loginStatus = SMAppService.mainApp.status
     }
 
     private var general: some View {
         @Bindable var preferences = controller.preferences
         return Form {
+            Section {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { loginStatus == .enabled || loginStatus == .requiresApproval },
+                    set: setLaunchAtLogin
+                ))
+                if loginStatus == .requiresApproval {
+                    LabeledContent("Allow Blah in Login Items") {
+                        Button("Open System Settings…") { SMAppService.openSystemSettingsLoginItems() }
+                    }
+                }
+                if let loginError { Text(loginError).foregroundStyle(.red) }
+            }
             if controller.hexRunning {
                 Section {
                     LabeledContent("Hex is still running") { Button("Quit Hex") { controller.quitHex() } }

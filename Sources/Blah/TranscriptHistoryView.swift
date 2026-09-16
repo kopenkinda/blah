@@ -66,9 +66,11 @@ struct TranscriptHistoryView: View {
             }
             Divider()
             HStack {
-                Text("\(controller.history.count) transcripts")
+                Text("\(controller.history.count) of \(TranscriptHistory.limit.formatted()) transcripts")
                 Spacer()
-                Text("Latest 2,000 · No time limit · Audio is never saved")
+                if controller.history.count >= TranscriptHistory.limit {
+                    Text("Limit reached. New transcripts replace the oldest.")
+                }
             }.font(.caption).foregroundStyle(.secondary).padding(12)
         }
         .onAppear { selectFirstIfNeeded() }

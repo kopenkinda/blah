@@ -14,6 +14,9 @@ This builds the app, replaces your previous local Blah build, installs it at
 `/Applications/Blah.app`, and launches it. It does not replace Hex.
 Development builds use this path too so menu bar tools can find Blah reliably.
 
+General includes a **Launch at login** toggle, backed by macOS Login Items.
+Login launches run in the menu bar without opening Settings.
+
 Enable Microphone, Input Monitoring, and Accessibility in Blah's settings.
 Quit Hex when you are ready to switch. Blah pauses its key listener while Hex
 is running so a gesture cannot start both apps.

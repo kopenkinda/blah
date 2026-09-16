@@ -34,7 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem = item
         controller.start()
-        showSettings()
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        let launchedAtLogin = event?.eventID == kAEOpenApplication
+            && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+        if !launchedAtLogin { showSettings() }
     }
 
     func applicationWillTerminate(_ notification: Notification) { controller.shutdown() }
