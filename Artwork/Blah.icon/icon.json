@@ -1,0 +1,51 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.94000,0.94000,0.95000,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": "system-light"
+            },
+            {
+              "appearance": "tinted",
+              "value": "system-light"
+            }
+          ],
+          "image-name": "Voice.svg",
+          "name": "Voice"
+        },
+        {
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": "system-light"
+            },
+            {
+              "appearance": "tinted",
+              "value": "system-light"
+            }
+          ],
+          "image-name": "Sound.svg",
+          "name": "Sound waves"
+        }
+      ],
+      "name": "Speaking",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.25
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.1
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

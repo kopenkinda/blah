@@ -97,6 +97,10 @@ final text, so the imported `rawText` matches `text`.
 
 ## Develop
 
+`Artwork/Blah.icon` is the editable Icon Composer app icon. Two SVG layers form
+a talking face and sound waves, with light, dark, and clear-glass appearances.
+Both the command-line build and Xcode compile it into the app's asset catalog.
+
 Requirements: Apple silicon, macOS 27, Swift 6.4, the macOS 27 SDK, Xcode 27's
 SwiftUI compiler plugins, and CMake for a fresh native-runtime build.
 

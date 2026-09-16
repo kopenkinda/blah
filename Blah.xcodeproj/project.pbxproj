@@ -20,6 +20,7 @@
 		A10000000000000000000010 /* BlahCleanup in Copy helper */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* BlahCleanup */;};
 		A10000000000000000000011 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* LICENSE */;};
 		A10000000000000000000012 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* THIRD_PARTY_NOTICES.md */;};
+		A10000000000000000000013 /* Blah.icon in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000E /* Blah.icon */;};
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +57,7 @@
 		A10000000000000000000005 /* BlahCleanup */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = BlahCleanup; sourceTree = BUILT_PRODUCTS_DIR;};
 		A10000000000000000000008 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>";};
 		A10000000000000000000009 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>";};
+		A1000000000000000000000E /* Blah.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Artwork/Blah.icon; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -78,6 +80,7 @@
 				A10000000000000000000007 /* Cleanup */,
 				A1000000000000000000000A /* Resources */,
 				A1000000000000000000000B /* scripts */,
+				A1000000000000000000000E /* Blah.icon */,
 				A10000000000000000000008 /* LICENSE */,
 				A10000000000000000000009 /* THIRD_PARTY_NOTICES.md */,
 				A1000000000000000000000D /* Products */,
@@ -151,7 +154,7 @@
 		A10000000000000000000023 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A10000000000000000000011 /* LICENSE in Resources */, A10000000000000000000012 /* THIRD_PARTY_NOTICES.md in Resources */,);
+			files = (A10000000000000000000011 /* LICENSE in Resources */, A10000000000000000000012 /* THIRD_PARTY_NOTICES.md in Resources */, A10000000000000000000013 /* Blah.icon in Resources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
@@ -207,6 +210,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Resources/Blah.entitlements;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Blah;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/transcribe/include";
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -222,6 +226,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Resources/Blah.entitlements;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Blah;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/transcribe/include";
 				INFOPLIST_FILE = Resources/Info.plist;

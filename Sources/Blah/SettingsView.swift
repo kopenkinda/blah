@@ -8,11 +8,12 @@ struct SettingsView: View {
         @Bindable var preferences = controller.preferences
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 26, weight: .medium))
-                    .foregroundStyle(.tint)
+                Image(nsImage: NSImage(contentsOf: Bundle.main.bundleURL
+                    .appendingPathComponent("Contents/Resources/Blah.icns"))
+                    ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                    .resizable()
+                    .scaledToFit()
                     .frame(width: 54, height: 54)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Blah").font(.largeTitle.weight(.semibold))
                     Text("Local dictation").foregroundStyle(.secondary)

@@ -31,5 +31,17 @@ cp "$binaries/Blah" "$binaries/BlahCleanup" "$app/Contents/MacOS/"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 cp LICENSE "$app/Contents/Resources/LICENSE"
 cp THIRD_PARTY_NOTICES.md "$app/Contents/Resources/THIRD_PARTY_NOTICES.md"
+actool="${BLAH_XCODE_DIR:-/Applications/Xcode.app/Contents/Developer}/usr/bin/actool"
+if [ ! -x "$actool" ]; then
+    echo 'Icon compilation requires Xcode 27. Set BLAH_XCODE_DIR to its Contents/Developer directory.' >&2
+    exit 1
+fi
+"$actool" Artwork/Blah.icon \
+    --compile "$app/Contents/Resources" \
+    --output-format human-readable-text --notices --warnings --errors \
+    --output-partial-info-plist .build/icon-info.plist \
+    --app-icon Blah --include-all-app-icons \
+    --enable-on-demand-resources NO --development-region en \
+    --target-device mac --minimum-deployment-target 27.0 --platform macosx
 python3 scripts/sign.py "$app"
 printf 'Built %s\n' "$app"
