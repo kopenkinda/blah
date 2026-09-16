@@ -24,13 +24,6 @@ struct SettingsView: View {
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 180, ideal: 205, max: 250)
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 7) {
-                    Circle().fill(controller.canDictate ? .green : .orange).frame(width: 6, height: 6)
-                    Text(controller.status).font(.caption).foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                }.padding(16)
-            }
         } detail: {
             VStack(spacing: 0) {
                 switch page ?? .general {
@@ -76,13 +69,6 @@ struct SettingsView: View {
                     permissionRow("Accessibility", allowed: controller.accessibilityAllowed, action: controller.requestAccessibility)
                 }
             }
-            Section("Dictation flow") {
-                LabeledContent("Hold the key", value: "Release to transcribe")
-                LabeledContent("Double-tap the key", value: "Tap again to finish")
-                LabeledContent("Escape", value: "Cancel dictation")
-                Text("Speak → Transcribe\(preferences.cleanup.enabled ? " → Format" : "") → Paste")
-                    .foregroundStyle(.secondary)
-            }
             Section {
                 Picker("Dictation key", selection: $preferences.key) {
                     ForEach(DictationKey.choices, id: \.code) { Text($0.label).tag($0) }
@@ -95,15 +81,67 @@ struct SettingsView: View {
             } header: { Text("Keyboard") } footer: {
                 Text(preferences.key.code == 63 ? "Set Press Globe key to Do Nothing in macOS Keyboard settings." : "The selected key is reserved for dictation.")
             }
-            Section("Chosen models") {
-                LabeledContent("Transcription", value: LocalModel.name(for: preferences.speechModel))
-                LabeledContent("Formatting", value: preferences.cleanup.enabled ? "S1-mini" : "Off")
+            Section {
+                if preferences.microphonePriority.isEmpty {
+                    Text("No microphones connected").foregroundStyle(.secondary)
+                }
+                ForEach(Array(preferences.microphonePriority.enumerated()), id: \.element.id) { index, microphone in
+                    HStack(spacing: 10) {
+                        Text("\(index + 1)").monospacedDigit().foregroundStyle(.secondary).frame(width: 20)
+                        Text(microphone.name)
+                        Spacer()
+                        if controller.preferredMicrophone?.microphone.id == microphone.id {
+                            Text("Preferred").font(.caption).foregroundStyle(.secondary)
+                        } else if !controller.availableMicrophones.contains(where: { $0.microphone.id == microphone.id }) {
+                            Text("Disconnected").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Button { controller.moveMicrophone(microphone.id, by: -1) } label: {
+                            Image(systemName: "chevron.up")
+                        }
+                        .help("Move up").accessibilityLabel("Move \(microphone.name) up")
+                        .disabled(index == 0 || controller.mode != .none || controller.isBusy)
+                        Button { controller.moveMicrophone(microphone.id, by: 1) } label: {
+                            Image(systemName: "chevron.down")
+                        }
+                        .help("Move down").accessibilityLabel("Move \(microphone.name) down")
+                        .disabled(index == preferences.microphonePriority.count - 1 || controller.mode != .none || controller.isBusy)
+                    }
+                }
+                if let error = controller.microphoneError {
+                    Text(error).foregroundStyle(.red)
+                }
+            } header: { Text("Microphone priority") } footer: {
+                Text("Uses the first available microphone. Changes apply to the next recording.")
+            }
+            Section("Models") {
+                Picker("Transcription", selection: Binding(
+                    get: { preferences.speechModel },
+                    set: { controller.selectSpeechModel($0) }
+                )) {
+                    ForEach(LocalModel.catalog.filter { !$0.isFormatting && library.installed.contains($0.id) }) {
+                        Text($0.name).tag($0.filename)
+                    }
+                    if !library.installed.contains(preferences.speechModel) {
+                        Text("\(LocalModel.name(for: preferences.speechModel)) · Not downloaded")
+                            .tag(preferences.speechModel).disabled(true)
+                    }
+                }
+                .disabled(controller.isBusy || controller.modelLoading)
+                Picker("Formatting", selection: Binding(
+                    get: { preferences.cleanup.enabled },
+                    set: { preferences.cleanup.enabled = $0; controller.cleanupChanged() }
+                )) {
+                    Text("Off").tag(false)
+                    Text(library.installed.contains(ModelFiles.cleanup) ? "S1-mini" : "S1-mini · Not downloaded")
+                        .tag(true).disabled(!library.installed.contains(ModelFiles.cleanup))
+                }
+                if !controller.modelReady && !controller.modelLoading {
+                    Button("Retry selected model") { controller.prepareModel() }.disabled(controller.isBusy)
+                }
                 Button("Manage models…") { page = .models }
             }
-            Section {
-                Toggle("Format transcripts", isOn: $preferences.cleanup.enabled)
-                    .onChange(of: preferences.cleanup.enabled) { controller.cleanupChanged() }
-                if preferences.cleanup.enabled {
+            if preferences.cleanup.enabled {
+                Section("Formatting") {
                     Picker("Style", selection: $preferences.cleanup.styling) {
                         Text("Casual").tag("casual")
                         Text("Semi-casual").tag("semi-casual")
@@ -119,8 +157,6 @@ struct SettingsView: View {
                         Text("Email").tag("email")
                     }
                 }
-            } header: { Text("Formatting") } footer: {
-                Text("S1-mini cleans up fillers, punctuation and formatting. If it fails, your original transcript is used.")
             }
             Section("Recording indicator") {
                 HStack {
@@ -139,26 +175,11 @@ struct SettingsView: View {
 
     private var models: some View {
         Form {
-            Section {
-                Text("Models run on your Mac. Download a model, then select Use to switch to it.")
-                LabeledContent("Transcription", value: controller.modelLoading ? "Loading…" : controller.modelReady ? "Ready" : "Unavailable")
-                if !controller.modelReady && !controller.modelLoading {
-                    Button("Retry selected model") { controller.prepareModel() }.disabled(controller.isBusy)
-                }
-            }
             Section("Transcription") {
                 ForEach(LocalModel.catalog.filter { !$0.isFormatting }) { model in modelRow(model) }
             }
-            Section {
+            Section("Formatting") {
                 ForEach(LocalModel.catalog.filter(\.isFormatting)) { model in modelRow(model) }
-                if controller.preferences.cleanup.enabled {
-                    Button("Turn off formatting") {
-                        controller.preferences.cleanup.enabled = false
-                        controller.cleanupChanged()
-                    }
-                }
-            } header: { Text("Formatting") } footer: {
-                Text("S1-mini is intended for English transcripts. Turn formatting off when dictating in another language.")
             }
             if let error = library.error {
                 Section { Text(error).foregroundStyle(.red).textSelection(.enabled) }
@@ -175,14 +196,11 @@ struct SettingsView: View {
                     }
                     Button("Refresh") { refresh() }
                 }
-                Text("Existing models can be reused from this folder. Downloads are checked before installation.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
     }
 
     private func modelRow(_ model: LocalModel) -> some View {
-        let selected = model.isFormatting ? controller.preferences.cleanup.enabled : controller.preferences.speechModel == model.filename
         let installed = library.installed.contains(model.id)
         return HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
@@ -201,16 +219,7 @@ struct SettingsView: View {
                     Button("Cancel") { library.cancel() }
                 }
             } else if installed {
-                if selected {
-                    Label("Selected", systemImage: "checkmark.circle.fill").foregroundStyle(.secondary)
-                } else {
-                    Button("Use") {
-                        if model.isFormatting {
-                            controller.preferences.cleanup.enabled = true
-                            controller.cleanupChanged()
-                        } else { controller.selectSpeechModel(model.filename) }
-                    }.disabled(controller.isBusy || controller.modelLoading)
-                }
+                Label("Downloaded", systemImage: "checkmark.circle").foregroundStyle(.secondary)
             } else {
                 Button("Download") { library.download(model, directory: controller.preferences.modelDirectory) }
                     .disabled(library.downloading != nil)

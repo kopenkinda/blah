@@ -45,6 +45,22 @@ and the last transcript is restored when Blah starts.
 Choose one of nine positions in settings. Selecting a position previews it on
 screen for three seconds. The position is saved and defaults to bottom center.
 
+## Microphones
+
+General lists input devices Blah has seen, excluding hidden devices and temporary
+Core Audio aggregates. Move devices up or down to set
+priority. New devices are appended at the bottom; disconnected devices keep their
+place and are skipped. Names and persistent Core Audio device IDs are saved with
+your preferences. On first setup, the current macOS input starts at the top.
+
+Blah checks availability again when recording starts and opens the first available
+microphone directly, without changing the system input. Connecting a preferred
+microphone during recording takes effect next time. If the recording device
+becomes unavailable or its input format changes, the recording is cancelled with a
+notice; the next recording selects the highest available microphone. Engine
+notifications that leave the input unchanged do not cancel recording. If only the
+engine stopped, Blah restarts it with the existing tap and conversion format.
+
 ## Models
 
 Blah reads the existing model files from:
@@ -56,10 +72,11 @@ Blah reads the existing model files from:
 ```
 
 Settings has a native sidebar with General, Models, and Transcript History.
-General contains the dictation flow, keyboard binding, chosen models, formatting,
-and orb position. Models offers Parakeet Unified English, Parakeet v2, Parakeet v3,
-and S1-mini, with model-card links, download sizes, cancellation, and explicit
-selection. Downloads use pinned revisions and are verified by size and SHA-256
+General contains the keyboard binding, microphone priority, model selectors,
+formatting, and orb position.
+Choose Off in the formatting model selector to disable formatting. Models offers Parakeet Unified English, Parakeet v2, Parakeet v3,
+and S1-mini downloads, with model-card links, sizes, and cancellation.
+Downloaded models become available in General. Downloads use pinned revisions and are verified by size and SHA-256
 before installation in the displayed folder. Existing files are never overwritten.
 Speech-model selection is saved and cannot change during recording or processing.
 Parakeet v3 supports 25 European languages; S1-mini formatting is for English.

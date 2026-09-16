@@ -9,6 +9,13 @@ final class DictationController {
     let preferences = Preferences()
     var mode = CaptureMode.none
     var captureVisible = false
+    var availableMicrophones: [Microphones.Device] = []
+    var microphoneError: String?
+    var preferredMicrophone: Microphones.Device? {
+        preferences.microphonePriority.lazy.compactMap { microphone in
+            self.availableMicrophones.first { $0.microphone.id == microphone.id }
+        }.first
+    }
     var microphoneAllowed = false
     var accessibilityAllowed = false
     var inputAllowed = false
@@ -49,7 +56,6 @@ final class DictationController {
     @ObservationIgnored private var jobs: [Job] = []
     @ObservationIgnored private var currentJob: Job?
     @ObservationIgnored private var processing = false
-    @ObservationIgnored private var audioObserver: NSObjectProtocol?
     @ObservationIgnored private var unsavedTranscript: TranscriptHistory.Entry?
 
     var unsavedHistoryEntry: TranscriptHistory.Entry? { unsavedTranscript }
@@ -96,15 +102,6 @@ final class DictationController {
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshPermissions() }
         }
-        audioObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.mode != .none else { return }
-                self.discardCapture()
-                self.notice = "The microphone changed during recording. Try again."
-            }
-        }
         prepareModel()
     }
 
@@ -123,7 +120,33 @@ final class DictationController {
         }
     }
 
+    func refreshMicrophones() {
+        do {
+            let devices = try Microphones.available()
+            if availableMicrophones != devices { availableMicrophones = devices }
+            microphoneError = nil
+            var remembered = preferences.microphonePriority.filter { !Microphones.isInternalDevice($0) }
+            for device in devices {
+                if let index = remembered.firstIndex(where: { $0.id == device.microphone.id }) {
+                    remembered[index].name = device.microphone.name
+                } else { remembered.append(device.microphone) }
+            }
+            if remembered != preferences.microphonePriority { preferences.microphonePriority = remembered }
+        } catch {
+            availableMicrophones = []
+            microphoneError = error.localizedDescription
+        }
+    }
+
+    func moveMicrophone(_ id: String, by offset: Int) {
+        guard mode == .none, captureStart == nil,
+              let index = preferences.microphonePriority.firstIndex(where: { $0.id == id }),
+              preferences.microphonePriority.indices.contains(index + offset) else { return }
+        preferences.microphonePriority.swapAt(index, index + offset)
+    }
+
     func refreshPermissions() {
+        refreshMicrophones()
         microphoneAllowed = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         accessibilityAllowed = AXIsProcessTrusted()
         inputAllowed = CGPreflightListenEventAccess()
@@ -287,7 +310,7 @@ final class DictationController {
         mode = .held
         let cancellation = Cancellation()
         captureCancellation = cancellation
-        captureStart = Task {
+        captureStart = Task { [self] in
             do {
                 if let previousStart {
                     do {
@@ -296,7 +319,17 @@ final class DictationController {
                     } catch { }
                 }
                 try cancellation.check()
-                try await recorder.start()
+                refreshMicrophones()
+                guard let microphone = preferredMicrophone else {
+                    throw AppFailure(microphoneError ?? "No microphone is available. Connect a microphone and try again.")
+                }
+                try await recorder.start(deviceID: microphone.deviceID) { [weak self] message in
+                    Task { @MainActor in
+                        guard let self, self.captureCancellation === cancellation, self.mode != .none else { return }
+                        self.discardCapture()
+                        self.notice = message
+                    }
+                }
             } catch {
                 // Finalization owns cleanup once the gesture has ended.
                 if captureCancellation === cancellation, mode != .none {
@@ -440,7 +473,7 @@ final class DictationController {
                         } catch {
                             formattingStatus = "Failed; original retained"
                             try job.cancellation.check()
-                            notice = "Cleanup failed. Used the original transcript. \(error.localizedDescription)"
+                            notice = "Cleanup failed. Using the original transcript."
                         }
                     }
                     try job.cancellation.check()
@@ -514,7 +547,6 @@ final class DictationController {
         previewTimer?.cancel()
         currentJob?.cancellation.cancel()
         jobs.forEach { $0.cancellation.cancel() }
-        if let audioObserver { NotificationCenter.default.removeObserver(audioObserver) }
         // The cleanup child exits on stdin EOF when the app exits.
     }
 }

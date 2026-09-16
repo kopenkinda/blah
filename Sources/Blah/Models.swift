@@ -39,6 +39,7 @@ enum OrbPosition: Int, CaseIterable, Codable {
 
 @MainActor @Observable
 final class Preferences {
+    var microphonePriority: [Microphone] { didSet { save() } }
     var key: DictationKey { didSet { save() } }
     var cleanup: CleanupOptions { didSet { save() } }
     var modelDirectory: String { didSet { save() } }
@@ -46,6 +47,7 @@ final class Preferences {
     var orbPosition: OrbPosition { didSet { save() } }
 
     private struct Saved: Codable {
+        var microphonePriority: [Microphone]?
         var key: DictationKey
         var cleanup: CleanupOptions
         var modelDirectory: String
@@ -57,12 +59,14 @@ final class Preferences {
         let defaults = UserDefaults.standard
         if let data = defaults.data(forKey: "preferences"),
            let saved = try? JSONDecoder().decode(Saved.self, from: data) {
+            microphonePriority = saved.microphonePriority ?? []
             speechModel = saved.speechModel ?? ModelFiles.speech
             key = saved.key
             cleanup = saved.cleanup
             modelDirectory = saved.modelDirectory
             orbPosition = saved.orbPosition ?? .bottom
         } else {
+            microphonePriority = []
             speechModel = ModelFiles.speech
             key = .globe
             cleanup = CleanupOptions()
@@ -73,7 +77,7 @@ final class Preferences {
     }
 
     private func save() {
-        let saved = Saved(key: key, cleanup: cleanup, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition)
+        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition)
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: "preferences")
         }

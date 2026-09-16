@@ -1,10 +1,13 @@
 import AVFoundation
+import AudioToolbox
+import CoreAudio
 import Foundation
 
 final class AudioRecorder: @unchecked Sendable {
     private let queue = DispatchQueue(label: "blah.microphone", qos: .userInitiated)
     private let lock = NSLock()
     private var engine: AVAudioEngine?
+    private var configurationObserver: NSObjectProtocol?
     private var samples: [Float] = []
     private var accepting = false
     private var peak: Float = 0
@@ -17,12 +20,24 @@ final class AudioRecorder: @unchecked Sendable {
 
     var level: Float { lock.withLock { peak } }
 
-    func start() async throws {
+    func start(deviceID: AudioDeviceID, onInterruption: @escaping @Sendable (String) -> Void) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
                 do {
                     let engine = AVAudioEngine()
                     let input = engine.inputNode
+                    try input.withAudioUnit { audioUnit in
+                        guard let audioUnit else { throw AppFailure("Could not open the selected microphone.") }
+                        // Setting the current device again can itself reconfigure the engine.
+                        if try Self.currentDevice(audioUnit) == deviceID { return }
+                        var selectedID = deviceID
+                        let result = AudioUnitSetProperty(audioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                                          kAudioUnitScope_Global, 0, &selectedID,
+                                                          UInt32(MemoryLayout<AudioDeviceID>.size))
+                        guard result == noErr else {
+                            throw AppFailure("Could not use the selected microphone. Check its connection and try again. Audio error: \(result).")
+                        }
+                    }
                     var tapInstalled = false
                     var started = false
                     defer {
@@ -101,6 +116,14 @@ final class AudioRecorder: @unchecked Sendable {
                     engine.prepare()
                     try engine.start()
                     self.engine = engine
+                    // Observe only this running engine, after device selection has finished.
+                    configurationObserver = NotificationCenter.default.addObserver(
+                        forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+                    ) { [weak self] _ in
+                        self?.handleConfigurationChange(generation: generation, deviceID: deviceID,
+                                                        sampleRate: format.sampleRate, channels: format.channelCount,
+                                                        onInterruption: onInterruption)
+                    }
                     started = true
                     continuation.resume()
                 } catch {
@@ -137,6 +160,8 @@ final class AudioRecorder: @unchecked Sendable {
                     drain = nil
                     cutoff = nil
                 }
+                if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
+                configurationObserver = nil
                 engine?.stop()
                 engine?.inputNode.removeTap(onBus: 0)
                 engine = nil
@@ -153,6 +178,44 @@ final class AudioRecorder: @unchecked Sendable {
         }
     }
 
+    private static func currentDevice(_ audioUnit: AudioUnit) throws -> AudioDeviceID {
+        var device: AudioDeviceID = 0
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let result = AudioUnitGetProperty(audioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                          kAudioUnitScope_Global, 0, &device, &size)
+        guard result == noErr else { throw AppFailure("Could not check the recording microphone.") }
+        return device
+    }
+
+    private func handleConfigurationChange(generation: Int, deviceID: AudioDeviceID,
+                                           sampleRate: Double, channels: AVAudioChannelCount,
+                                           onInterruption: @escaping @Sendable (String) -> Void) {
+        // Core Audio delivers these on its own queue, including delayed startup and
+        // output changes. Inspect the current input on our queue before interrupting.
+        queue.async { [self] in
+            guard lock.withLock({ accepting && self.generation == generation }), let engine else { return }
+            do {
+                let input = engine.inputNode
+                let currentID = try input.withAudioUnit { unit -> AudioDeviceID in
+                    guard let unit else { throw AppFailure("The recording microphone is unavailable.") }
+                    return try Self.currentDevice(unit)
+                }
+                guard currentID == deviceID else {
+                    throw AppFailure("The recording input changed. Try recording again.")
+                }
+                let format = input.outputFormat(forBus: 0)
+                guard format.sampleRate == sampleRate, format.channelCount == channels else {
+                    throw AppFailure("The microphone's audio format changed. Try recording again.")
+                }
+                // An output-device change can stop the engine without changing our
+                // input or tap format. The existing recording can continue safely.
+                if !engine.isRunning { try engine.start() }
+            } catch {
+                onInterruption(error.localizedDescription)
+            }
+        }
+    }
+
     private func failConversion(generation: Int) {
         let failed = lock.withLock {
             guard accepting, self.generation == generation else { return false }
@@ -165,6 +228,8 @@ final class AudioRecorder: @unchecked Sendable {
         guard failed else { return }
         queue.async { [self] in
             guard lock.withLock({ self.generation == generation }) else { return }
+            if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
+            configurationObserver = nil
             engine?.stop()
             engine?.inputNode.removeTap(onBus: 0)
             engine = nil

@@ -16,7 +16,7 @@ struct LocalModel: Identifiable, Sendable {
     var download: URL { source.appendingPathComponent("resolve/\(revision)/\(filename)") }
 
     static let catalog: [Self] = [
-        .init(name: "Parakeet Unified English", detail: "English · Q8 · Your original model",
+        .init(name: "Parakeet Unified English", detail: "English · Q8",
               filename: ModelFiles.speech, repository: "handy-computer/parakeet-unified-en-0.6b-gguf",
               revision: "7e948f21b7bdbac698d3318db9d350f1096f3b6c", bytes: 731_357_568,
               sha256: "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795"),
