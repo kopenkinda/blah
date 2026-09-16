@@ -65,7 +65,7 @@ final class KeyMonitor {
             return Unmanaged.passUnretained(event)
         }
         let code = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        let down = type == .flagsChanged ? modifierIsDown(code, flags: event.flags) : type == .keyDown
+        let down = type == .flagsChanged ? Self.modifierIsDown(code, flags: event.flags) : type == .keyDown
         if code == 53 {
             if type == .keyUp, suppressEscape { suppressEscape = false; return nil }
             if down {
@@ -108,7 +108,7 @@ final class KeyMonitor {
         return nil
     }
 
-    private func modifierIsDown(_ code: UInt16, flags: CGEventFlags) -> Bool {
+    static func modifierIsDown(_ code: UInt16, flags: CGEventFlags) -> Bool {
         // Device-specific masks from IOKit's IOLLEvent.h distinguish left and right.
         let mask: UInt64
         switch code {

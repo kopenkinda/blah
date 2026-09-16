@@ -20,9 +20,9 @@ final class DictationController {
     var accessibilityAllowed = false
     var inputAllowed = false
     var keyMonitorRunning = false
+    var recordingKey = false
     var modelReady = false
     var modelLoading = false
-    var hexRunning = false
     var stage: String?
     var notice: String? {
         didSet { updateOverlay() }
@@ -45,7 +45,7 @@ final class DictationController {
     @ObservationIgnored private var overlay: RecordingOverlay?
     @ObservationIgnored private var permissionTimer: Timer?
     @ObservationIgnored private var meterTimer: Timer?
-    @ObservationIgnored private var captureStart: Task<Void, Error>?
+    private var captureStart: Task<Void, Error>?
     @ObservationIgnored private var captureCancellation: Cancellation?
     @ObservationIgnored private var gestureTimer: Task<Void, Never>?
     @ObservationIgnored private var noticeTimer: Task<Void, Never>?
@@ -55,7 +55,7 @@ final class DictationController {
     @ObservationIgnored private var target: pid_t?
     @ObservationIgnored private var jobs: [Job] = []
     @ObservationIgnored private var currentJob: Job?
-    @ObservationIgnored private var processing = false
+    private var processing = false
     @ObservationIgnored private var unsavedTranscript: TranscriptHistory.Entry?
 
     var unsavedHistoryEntry: TranscriptHistory.Entry? { unsavedTranscript }
@@ -70,7 +70,7 @@ final class DictationController {
     }
 
     var canDictate: Bool {
-        microphoneAllowed && accessibilityAllowed && inputAllowed && keyMonitorRunning && modelReady && !hexRunning && !pastingLastTranscript
+        microphoneAllowed && accessibilityAllowed && inputAllowed && keyMonitorRunning && modelReady && !pastingLastTranscript && !recordingKey
     }
     var isBusy: Bool { captureStart != nil || processing || pastingLastTranscript }
     var status: String {
@@ -150,10 +150,7 @@ final class DictationController {
         microphoneAllowed = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         accessibilityAllowed = AXIsProcessTrusted()
         inputAllowed = CGPreflightListenEventAccess()
-        hexRunning = NSWorkspace.shared.runningApplications.contains {
-            $0.bundleURL?.lastPathComponent.lowercased() == "hex.app"
-        }
-        if microphoneAllowed && accessibilityAllowed && inputAllowed && modelReady && !hexRunning {
+        if microphoneAllowed && accessibilityAllowed && inputAllowed && modelReady && !recordingKey {
             keyMonitorRunning = keys.start()
         } else {
             if mode != .none { discardCapture() }
@@ -188,10 +185,18 @@ final class DictationController {
         }
     }
 
-    func changeKey() {
-        discardCapture()
+    func beginKeyRecording() -> Bool {
+        guard !isBusy, mode == .none else { return false }
+        recordingKey = true
         keys.stop()
+        keyMonitorRunning = false
+        return true
+    }
+
+    func endKeyRecording(_ key: DictationKey? = nil) {
+        if let key { preferences.key = key }
         keys.key = preferences.key
+        recordingKey = false
         refreshPermissions()
     }
 
@@ -273,12 +278,6 @@ final class DictationController {
                 _ = try await TextInsertion.paste(text, target: target, cancellation: Cancellation())
             } catch is CancellationError { }
             catch { notice = "Could not paste the last transcription. \(error.localizedDescription)" }
-        }
-    }
-
-    func quitHex() {
-        for app in NSWorkspace.shared.runningApplications where app.bundleURL?.lastPathComponent.lowercased() == "hex.app" {
-            app.terminate()
         }
     }
 

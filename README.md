@@ -12,11 +12,11 @@ A small native Swift dictation app for macOS 27, inspired by [Hex](https://githu
 - Hold your dictation key to record. Release to transcribe and paste.
 - Double-tap to record hands-free. Tap again to finish. Escape cancels.
 - Left-click the menu bar icon to paste the last transcription or quit. Right-click for Settings.
-- In General, choose your key, models, formatting, orb position, and launch at login.
+- In General, click your dictation key and press a replacement. Letters, numbers, and standalone modifiers work too. Choose models, formatting, orb position, and launch at login there.
 - Arrange microphones by priority. Blah uses the first available one, remembers disconnected microphones, and adds new ones at the bottom.
 - Browse, search, and copy previous dictations in Transcript History, including the original text before formatting.
 
-Enable Microphone, Input Monitoring, and Accessibility when prompted. The default key is Globe / Fn. Set "Press Globe key to" to "Do Nothing" in macOS Keyboard settings. Quit Hex before dictating with Blah; the key listener pauses while Hex is running.
+Enable Microphone, Input Monitoring, and Accessibility when prompted. The default key is Globe / Fn. Set "Press Globe key to" to "Do Nothing" in macOS Keyboard settings. A plain key such as P is reserved for dictation when pressed alone; combinations such as Command-P still work. Escape cancels key selection, and Caps Lock cannot be used for hold-to-dictate.
 
 If formatting fails, Blah uses the original transcript. If it cannot paste, the transcript stays on the clipboard.
 

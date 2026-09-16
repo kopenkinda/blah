@@ -83,12 +83,6 @@ struct SettingsView: View {
                 }
                 if let loginError { Text(loginError).foregroundStyle(.red) }
             }
-            if controller.hexRunning {
-                Section {
-                    LabeledContent("Hex is still running") { Button("Quit Hex") { controller.quitHex() } }
-                    Text("Quit Hex so the two apps do not share your dictation key.").foregroundStyle(.secondary)
-                }
-            }
             if !controller.microphoneAllowed || !controller.accessibilityAllowed || !controller.inputAllowed {
                 Section("Allow access") {
                     permissionRow("Microphone", allowed: controller.microphoneAllowed, action: controller.requestMicrophone)
@@ -97,16 +91,12 @@ struct SettingsView: View {
                 }
             }
             Section {
-                Picker("Dictation key", selection: $preferences.key) {
-                    ForEach(DictationKey.choices, id: \.code) { Text($0.label).tag($0) }
-                }
-                .disabled(controller.isBusy)
-                .onChange(of: preferences.key) { controller.changeKey() }
+                DictationKeyRecorder(controller: controller)
                 Button("Open Keyboard Settings…") {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
                 }
             } header: { Text("Keyboard") } footer: {
-                Text(preferences.key.code == 63 ? "Set Press Globe key to Do Nothing in macOS Keyboard settings." : "The selected key is reserved for dictation.")
+                Text(preferences.key.code == 63 ? "Set Press Globe key to Do Nothing in macOS Keyboard settings." : "\(preferences.key.label) is reserved for dictation when pressed on its own.")
             }
             Section {
                 if preferences.microphonePriority.isEmpty {

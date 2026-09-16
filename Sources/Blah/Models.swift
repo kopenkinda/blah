@@ -11,12 +11,7 @@ struct DictationKey: Codable, Hashable, Sendable {
     var code: UInt16
     var label: String
     static let globe = Self(code: 63, label: "Globe / Fn")
-    static let choices: [Self] = [
-        .globe, .init(code: 61, label: "Right Option"),
-        .init(code: 62, label: "Right Control"), .init(code: 54, label: "Right Command"),
-        .init(code: 97, label: "F6"), .init(code: 100, label: "F8"),
-        .init(code: 105, label: "F13"), .init(code: 80, label: "F19")
-    ]
+
 }
 
 struct CleanupOptions: Codable, Sendable {
