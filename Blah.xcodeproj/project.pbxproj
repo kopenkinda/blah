@@ -1,0 +1,315 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXAggregateTarget section */
+		A10000000000000000000001 /* NativeRuntimes */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = A10000000000000000000040 /* Build configuration list for NativeRuntimes */;
+			buildPhases = (A10000000000000000000020 /* Prepare native runtimes */,);
+			dependencies = ();
+			name = NativeRuntimes;
+			productName = NativeRuntimes;
+		};
+/* End PBXAggregateTarget section */
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000010 /* BlahCleanup in Copy helper */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* BlahCleanup */;};
+		A10000000000000000000011 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* LICENSE */;};
+		A10000000000000000000012 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* THIRD_PARTY_NOTICES.md */;};
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000030 /* NativeRuntimes proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000001;
+			remoteInfo = NativeRuntimes;
+		};
+		A10000000000000000000031 /* BlahCleanup proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000003;
+			remoteInfo = BlahCleanup;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A10000000000000000000024 /* Copy helper */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (A10000000000000000000010 /* BlahCleanup in Copy helper */,);
+			name = "Copy helper";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000004 /* Blah.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Blah.app; sourceTree = BUILT_PRODUCTS_DIR;};
+		A10000000000000000000005 /* BlahCleanup */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = BlahCleanup; sourceTree = BUILT_PRODUCTS_DIR;};
+		A10000000000000000000008 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>";};
+		A10000000000000000000009 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>";};
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A10000000000000000000006 /* Blah */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Sources/Blah; sourceTree = "<group>";};
+		A10000000000000000000007 /* Cleanup */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Sources/Cleanup; sourceTree = "<group>";};
+		A1000000000000000000000A /* Resources */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Resources; sourceTree = "<group>";};
+		A1000000000000000000000B /* scripts */ = {isa = PBXFileSystemSynchronizedRootGroup; path = scripts; sourceTree = "<group>";};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000022 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+		A10000000000000000000026 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1000000000000000000000C = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000006 /* Blah */,
+				A10000000000000000000007 /* Cleanup */,
+				A1000000000000000000000A /* Resources */,
+				A1000000000000000000000B /* scripts */,
+				A10000000000000000000008 /* LICENSE */,
+				A10000000000000000000009 /* THIRD_PARTY_NOTICES.md */,
+				A1000000000000000000000D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1000000000000000000000D /* Products */ = {
+			isa = PBXGroup;
+			children = (A10000000000000000000004 /* Blah.app */, A10000000000000000000005 /* BlahCleanup */,);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000002 /* Blah */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000041 /* Build configuration list for Blah */;
+			buildPhases = (
+				A10000000000000000000021 /* Sources */,
+				A10000000000000000000022 /* Frameworks */,
+				A10000000000000000000023 /* Resources */,
+				A10000000000000000000024 /* Copy helper */,
+				A10000000000000000000027 /* Sign with stable identity */,
+			);
+			buildRules = ();
+			dependencies = (A10000000000000000000033 /* BlahCleanup dependency */, A10000000000000000000034 /* NativeRuntimes dependency */,);
+			fileSystemSynchronizedGroups = (A10000000000000000000006 /* Blah */,);
+			name = Blah;
+			productName = Blah;
+			productReference = A10000000000000000000004 /* Blah.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000003 /* BlahCleanup */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000042 /* Build configuration list for BlahCleanup */;
+			buildPhases = (A10000000000000000000025 /* Sources */, A10000000000000000000026 /* Frameworks */,);
+			buildRules = ();
+			dependencies = (A10000000000000000000032 /* NativeRuntimes dependency */,);
+			fileSystemSynchronizedGroups = (A10000000000000000000007 /* Cleanup */,);
+			name = BlahCleanup;
+			productName = BlahCleanup;
+			productReference = A10000000000000000000005 /* BlahCleanup */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+			};
+			buildConfigurationList = A10000000000000000000043 /* Build configuration list for project */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base,);
+			mainGroup = A1000000000000000000000C;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A1000000000000000000000D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A10000000000000000000002 /* Blah */, A10000000000000000000003 /* BlahCleanup */, A10000000000000000000001 /* NativeRuntimes */,);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000023 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A10000000000000000000011 /* LICENSE in Resources */, A10000000000000000000012 /* THIRD_PARTY_NOTICES.md in Resources */,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000000000000000000020 /* Prepare native runtimes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Prepare native runtimes";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n\"$SRCROOT/scripts/prepare-runtimes.sh\"\n";
+		};
+		A10000000000000000000027 /* Sign with stable identity */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(SRCROOT)/scripts/sign.py",
+				"$(SRCROOT)/Resources/Blah.entitlements",
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/BlahCleanup",
+			);
+			name = "Sign with stable identity";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\n/usr/bin/env python3 \"$SRCROOT/scripts/sign.py\" \"$TARGET_BUILD_DIR/$WRAPPER_NAME\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000021 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+		A10000000000000000000025 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000032 /* NativeRuntimes dependency */ = {isa = PBXTargetDependency; target = A10000000000000000000001 /* NativeRuntimes */; targetProxy = A10000000000000000000030 /* NativeRuntimes proxy */;};
+		A10000000000000000000033 /* BlahCleanup dependency */ = {isa = PBXTargetDependency; target = A10000000000000000000003 /* BlahCleanup */; targetProxy = A10000000000000000000031 /* BlahCleanup proxy */;};
+		A10000000000000000000034 /* NativeRuntimes dependency */ = {isa = PBXTargetDependency; target = A10000000000000000000001 /* NativeRuntimes */; targetProxy = A10000000000000000000030 /* NativeRuntimes proxy */;};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000050 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ENABLE_USER_SCRIPT_SANDBOXING = NO;}; name = Debug;};
+		A10000000000000000000051 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ENABLE_USER_SCRIPT_SANDBOXING = NO;}; name = Release;};
+		A10000000000000000000052 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/Blah.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/transcribe/include";
+				INFOPLIST_FILE = Resources/Info.plist;
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/transcribe/lib";
+				OTHER_LDFLAGS = ("$(inherited)", "-ltranscribe",);
+				PRODUCT_BUNDLE_IDENTIFIER = com.dk.blah;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/.build/runtimes/transcribe/include/transcribe.h";
+			};
+			name = Debug;
+		};
+		A10000000000000000000053 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/Blah.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/transcribe/include";
+				INFOPLIST_FILE = Resources/Info.plist;
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/transcribe/lib";
+				OTHER_LDFLAGS = ("$(inherited)", "-ltranscribe",);
+				PRODUCT_BUNDLE_IDENTIFIER = com.dk.blah;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/.build/runtimes/transcribe/include/transcribe.h";
+			};
+			name = Release;
+		};
+		A10000000000000000000054 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/llama/include";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/llama/lib";
+				OTHER_LDFLAGS = ("$(inherited)", "-lllama",);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/.build/runtimes/llama/include/llama.h";
+			};
+			name = Debug;
+		};
+		A10000000000000000000055 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/llama/include";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/.build/runtimes/llama/lib";
+				OTHER_LDFLAGS = ("$(inherited)", "-lllama",);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/.build/runtimes/llama/include/llama.h";
+			};
+			name = Release;
+		};
+		A10000000000000000000056 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				CODE_SIGN_STYLE = Manual;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = ("-lggml", "-lggml-cpu", "-lggml-metal", "-lggml-base", "-lc++", "-framework", Accelerate, "-framework", Foundation, "-framework", Metal, "-framework", MetalKit,);
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000057 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				CODE_SIGN_STYLE = Manual;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				OTHER_LDFLAGS = ("-lggml", "-lggml-cpu", "-lggml-metal", "-lggml-base", "-lc++", "-framework", Accelerate, "-framework", Foundation, "-framework", Metal, "-framework", MetalKit,);
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000040 /* Build configuration list for NativeRuntimes */ = {isa = XCConfigurationList; buildConfigurations = (A10000000000000000000050 /* Debug */, A10000000000000000000051 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+		A10000000000000000000041 /* Build configuration list for Blah */ = {isa = XCConfigurationList; buildConfigurations = (A10000000000000000000052 /* Debug */, A10000000000000000000053 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+		A10000000000000000000042 /* Build configuration list for BlahCleanup */ = {isa = XCConfigurationList; buildConfigurations = (A10000000000000000000054 /* Debug */, A10000000000000000000055 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+		A10000000000000000000043 /* Build configuration list for project */ = {isa = XCConfigurationList; buildConfigurations = (A10000000000000000000056 /* Debug */, A10000000000000000000057 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000000 /* Project object */;
+}
