@@ -42,18 +42,22 @@ private struct MenuContent: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Text(controller.status)
-        if controller.isBusy {
-            Button("Cancel dictation") { controller.cancel() }
+        Group {
+            Text(controller.status)
+            if controller.isBusy {
+                Button("Cancel dictation") { controller.cancel() }
+            }
+            Divider()
+            Button("Settings…") {
+                openWindow(id: "settings")
+                NSApp.activate(ignoringOtherApps: true)
+            }.keyboardShortcut(",")
+            Button("Copy last transcript") { controller.copyLastTranscript() }
+                .disabled(controller.lastTranscript.isEmpty)
+            Button("Open transcript history…") { controller.openHistory() }
+            Divider()
+            Button("Quit Blah") { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
-        Divider()
-        Button("Settings…") {
-            openWindow(id: "settings")
-            NSApp.activate(ignoringOtherApps: true)
-        }.keyboardShortcut(",")
-        Button("Copy last transcript") { TextInsertion.copy(controller.lastTranscript) }
-            .disabled(controller.lastTranscript.isEmpty)
-        Divider()
-        Button("Quit Blah") { NSApp.terminate(nil) }.keyboardShortcut("q")
+        .onAppear { controller.reloadHistory() }
     }
 }

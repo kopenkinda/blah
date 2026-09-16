@@ -151,6 +151,17 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    HStack {
+                        Button("Open history") { controller.openHistory() }
+                        Button("Show in Finder") { controller.openHistory(reveal: true) }
+                    }
+                } header: {
+                    Text("Transcript history")
+                } footer: {
+                    Text("Keeps your latest 2,000 transcripts with no time limit. Open history.jsonl to edit or remove entries. Audio is never saved.")
+                }
+
                 if !controller.lastTranscript.isEmpty {
                     Section {
                         DisclosureGroup("Last transcript", isExpanded: $showTranscript) {
@@ -159,9 +170,9 @@ struct SettingsView: View {
                                     .textSelection(.enabled).padding(.vertical, 4)
                             }.frame(maxHeight: 140)
                             HStack {
-                                Button("Copy") { TextInsertion.copy(controller.lastTranscript) }
+                                Button("Copy") { controller.copyLastTranscript() }
                                 if controller.lastRawTranscript != controller.lastTranscript {
-                                    Button("Copy original") { TextInsertion.copy(controller.lastRawTranscript) }
+                                    Button("Copy original") { controller.copyLastTranscript(original: true) }
                                 }
                             }
                         }
@@ -180,6 +191,7 @@ struct SettingsView: View {
             .padding(.horizontal, 28).padding(.vertical, 14)
         }
         .frame(width: 560, height: 730)
+        .onAppear { controller.reloadHistory() }
     }
 
     private func permissionRow(_ name: String, detail: String, allowed: Bool, action: @escaping () -> Void) -> some View {

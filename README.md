@@ -31,9 +31,10 @@ The floating particle orb fits within 36 × 36 points, inside a compact native
 glass pill, and never takes keyboard focus. Its pink and indigo particles ripple with your voice
 and contract rhythmically while processing. An amber orb
 signals a notice. For now, its full text appears beneath the orb for eight
-seconds and stays in settings. Clipboard-only completion and cancellation
-do not show warnings. The last transcript remains available in settings
-until Blah quits; transcript history is not yet saved.
+seconds and stays in settings. "No speech was detected" disappears from the
+overlay after three seconds. Clipboard-only completion and cancellation
+do not show warnings. Completed transcripts are saved to local history,
+and the last transcript is restored when Blah starts.
 Choose one of nine positions in settings. Selecting a position previews it on
 screen for three seconds. The position is saved and defaults to bottom center.
 
@@ -56,9 +57,43 @@ those three options. Cleanup failures, timeouts, or transcripts above the
 model's 1,000-token input limit preserve the original transcript.
 
 Audio exists only in memory. The most recent transcript remains available to
-copy until the app quits. If the original app is no longer in front, Blah copies
+copy after restarting. If the original app is no longer in front, Blah copies
 the result instead of pasting into another app. After an automatic paste, it
 restores the previous clipboard unless the user has copied something else.
+
+## Transcript history
+
+Every completed dictation is saved as one JSON object per line in this UTF-8 file:
+
+```text
+~/Library/Application Support/Blah/history.jsonl
+```
+
+Use **Open history** or **Show in Finder** in settings, or **Open transcript
+history…** in the menu bar. Each entry contains `id`, `createdAt` as an ISO 8601
+timestamp, `rawText`, and final `text`. Edit entries or delete whole lines with
+any text editor. Text line breaks are escaped inside each JSON record.
+
+There is no time-based expiry. Blah keeps the newest 2,000 entries, removing
+the oldest when a new transcript exceeds that limit. Below the limit, new
+entries are appended. At the limit, the file is replaced atomically. Blah
+reads the current file before each save, so it does not restore deleted entries
+from memory. If you delete the file, the next dictation creates a fresh one.
+Save edits before dictating again so your editor does not overwrite a new entry.
+
+The menu bar's **Copy last transcript** restores the latest entry after a
+restart and re-reads history when used. Settings can also copy the original
+text. A malformed line is reported by line number; Blah will not overwrite
+that file. If saving fails, the new transcript remains available in memory
+to copy, and normal paste/clipboard delivery continues.
+
+History is saved whether automatic pasting succeeds or falls back to the
+clipboard. Recordings cancelled before completion and recordings without a
+transcript are not added. Audio is never written to disk.
+
+Existing `Transcripts.txt` entries are imported once, preserving their timestamps.
+The original text log is retained as a backup. Those old entries only contain
+final text, so the imported `rawText` matches `text`.
 
 ## Develop
 
@@ -108,6 +143,7 @@ The app has no test target or test suite.
   separate process keeps the two runtimes' GGML symbols apart, makes a stalled
   cleanup cancellable, and releases cleanup model memory when disabled.
 - `TextInsertion.swift` owns paste and clipboard restoration.
+- `TranscriptHistory.swift` appends completed transcripts to the editable local history file.
 - The remaining Swift files contain preferences, the app entry point, settings,
   and the recording indicator.
 

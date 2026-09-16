@@ -47,6 +47,7 @@ final class DictationController {
     @ObservationIgnored private var currentJob: Job?
     @ObservationIgnored private var processing = false
     @ObservationIgnored private var audioObserver: NSObjectProtocol?
+    @ObservationIgnored private var unsavedTranscript: TranscriptHistory.Entry?
 
     private struct Job {
         var samples: [Float]
@@ -70,6 +71,7 @@ final class DictationController {
     func start() {
         guard permissionTimer == nil else { return }
         overlay = RecordingOverlay(controller: self)
+        reloadHistory()
         keys.key = preferences.key
         keys.onPress = { [weak self] time in self?.press(at: time) }
         keys.onRelease = { [weak self] time in self?.release(at: time) }
@@ -175,6 +177,47 @@ final class DictationController {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         preferences.modelDirectory = url.path
         prepareModel()
+    }
+
+    func openHistory(reveal: Bool = false) {
+        do {
+            try TranscriptHistory.prepare()
+            if reveal {
+                NSWorkspace.shared.activateFileViewerSelecting([TranscriptHistory.url])
+            } else {
+                guard let editor = NSWorkspace.shared.urlForApplication(toOpen: TranscriptHistory.url)
+                    ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.TextEdit") else {
+                    throw AppFailure("No text editor is available. Use Show in Finder to choose one.")
+                }
+                Task {
+                    do {
+                        _ = try await NSWorkspace.shared.open([TranscriptHistory.url], withApplicationAt: editor,
+                                                              configuration: .init())
+                    } catch { notice = "Could not open transcript history. \(error.localizedDescription)" }
+                }
+            }
+        } catch {
+            notice = "Could not open transcript history. \(error.localizedDescription)"
+        }
+    }
+
+    @discardableResult func reloadHistory() -> Bool {
+        do {
+            let entry = try unsavedTranscript ?? TranscriptHistory.load().last
+            lastTranscript = entry?.text ?? ""
+            lastRawTranscript = entry?.rawText ?? ""
+            return true
+        } catch {
+            lastTranscript = ""
+            lastRawTranscript = ""
+            notice = "Could not read transcript history. \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func copyLastTranscript(original: Bool = false) {
+        guard reloadHistory(), !lastTranscript.isEmpty else { return }
+        TextInsertion.copy(original ? lastRawTranscript : lastTranscript)
     }
 
     func quitHex() {
@@ -367,6 +410,15 @@ final class DictationController {
                     stage = "Pasting"
                     lastRawTranscript = raw
                     lastTranscript = text
+                    let entry = TranscriptHistory.Entry(rawText: raw, text: text)
+                    do {
+                        try TranscriptHistory.append(entry)
+                        unsavedTranscript = nil
+                    } catch {
+                        unsavedTranscript = entry
+                        let message = "Could not save this transcript to history. You can still copy it from Last transcript. \(error.localizedDescription)"
+                        notice = [notice, message].compactMap { $0 }.joined(separator: "\n\n")
+                    }
                     // Clipboard-only completion is successful too. The transcript remains available in Settings.
                     _ = try await TextInsertion.paste(text, target: job.target, cancellation: job.cancellation)
                 } catch is CancellationError { }
@@ -386,8 +438,9 @@ final class DictationController {
         if captureVisible || stage != nil { overlay?.show() }
         else if notice != nil {
             overlay?.show()
+            let duration: Duration = notice == "No speech was detected." ? .seconds(3) : .seconds(8)
             noticeTimer = Task {
-                try? await Task.sleep(for: .seconds(8))
+                try? await Task.sleep(for: duration)
                 guard !Task.isCancelled, !captureVisible, stage == nil else { return }
                 overlay?.hide()
             }
