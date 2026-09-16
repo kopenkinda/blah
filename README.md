@@ -11,7 +11,8 @@ and contains none of Hex's application, service, or Rust helper code.
 ```
 
 This builds the app, replaces your previous local Blah build, installs it at
-`~/Applications/Blah.app`, and launches it. It does not replace Hex.
+`/Applications/Blah.app`, and launches it. It does not replace Hex.
+Development builds use this path too so menu bar tools can find Blah reliably.
 
 Enable Microphone, Input Monitoring, and Accessibility in Blah's settings.
 Quit Hex when you are ready to switch. Blah pauses its key listener while Hex
@@ -20,6 +21,12 @@ is running so a gesture cannot start both apps.
 The default key is Globe / Fn. Set "Press Globe key to" to "Do Nothing" in
 macOS Keyboard settings. You can instead select a right-side modifier or a
 function key in Blah.
+
+The talking-face icon in the menu bar opens **Paste last transcription** and
+**Quit Blah** on left-click. Right-click opens Settings directly. Pasting uses
+the app that was in front when you opened the menu; if that app loses focus,
+the transcript is copied to the clipboard instead. The paste action is disabled
+while dictation is busy or history is empty.
 
 - Hold the key, speak, and release to transcribe and paste.
 - Double-tap within 300 ms to record hands-free. Tap again to finish.
@@ -69,8 +76,8 @@ Every completed dictation is saved as one JSON object per line in this UTF-8 fil
 ~/Library/Application Support/Blah/history.jsonl
 ```
 
-Use **Open history** or **Show in Finder** in settings, or **Open transcript
-history…** in the menu bar. Each entry contains `id`, `createdAt` as an ISO 8601
+Use **Open history** or **Show in Finder** in settings. Each entry contains
+`id`, `createdAt` as an ISO 8601
 timestamp, `rawText`, and final `text`. Edit entries or delete whole lines with
 any text editor. Text line breaks are escaped inside each JSON record.
 
@@ -81,8 +88,8 @@ reads the current file before each save, so it does not restore deleted entries
 from memory. If you delete the file, the next dictation creates a fresh one.
 Save edits before dictating again so your editor does not overwrite a new entry.
 
-The menu bar's **Copy last transcript** restores the latest entry after a
-restart and re-reads history when used. Settings can also copy the original
+The menu bar's **Paste last transcription** restores the latest entry after a
+restart and re-reads history when used. Settings can copy the final or original
 text. A malformed line is reported by line number; Blah will not overwrite
 that file. If saving fails, the new transcript remains available in memory
 to copy, and normal paste/clipboard delivery continues.
@@ -128,7 +135,7 @@ does not change system certificate trust or your default keychain.
 
 Switching from the original ad-hoc build may require granting permissions once
 more. If macOS still shows an enabled entry that Blah cannot use, remove Blah
-from that permission list and add `~/Applications/Blah.app` again, then reopen
+from that permission list and add `/Applications/Blah.app` again, then reopen
 the app. The installer verifies and replaces the whole bundle at this stable
 path, instead of updating files inside a running app.
 
@@ -147,6 +154,7 @@ The app has no test target or test suite.
   separate process keeps the two runtimes' GGML symbols apart, makes a stalled
   cleanup cancellable, and releases cleanup model memory when disabled.
 - `TextInsertion.swift` owns paste and clipboard restoration.
+- `BlahApp.swift` owns the native status item, its left/right-click behavior, and the settings window.
 - `TranscriptHistory.swift` appends completed transcripts to the editable local history file.
 - The remaining Swift files contain preferences, the app entry point, settings,
   and the recording indicator.

@@ -3,13 +3,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ./scripts/build.sh
 # Stage and verify the whole bundle before replacing the installed app.
-app="$HOME/Applications/Blah.app"
-mkdir -p "$HOME/Applications"
+# Use /Applications even during development so menu bar tools find Blah.
+# Keep the same path across every update.
+app="/Applications/Blah.app"
 if [ -e "$app" ]; then
     installed_id="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist")"
     [ "$installed_id" = com.dk.blah ] || { echo 'A different app occupies the install path.' >&2; exit 1; }
 fi
-staging="$(mktemp -d "$HOME/Applications/.Blah.XXXXXX")"
+staging="$(mktemp -d /Applications/.Blah.XXXXXX)"
 trap 'rm -rf "$staging"' EXIT
 ditto .build/Blah.app "$staging/Blah.app"
 codesign --verify --deep --strict "$staging/Blah.app"

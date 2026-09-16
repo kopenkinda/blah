@@ -28,6 +28,7 @@ final class DictationController {
     var level: Float = 0
     var queuedCount = 0
     var previewingOrb = false
+    private var pastingLastTranscript = false
 
     @ObservationIgnored private let keys = KeyMonitor()
     @ObservationIgnored private let recorder = AudioRecorder()
@@ -58,12 +59,13 @@ final class DictationController {
     }
 
     var canDictate: Bool {
-        microphoneAllowed && accessibilityAllowed && inputAllowed && keyMonitorRunning && modelReady && !hexRunning
+        microphoneAllowed && accessibilityAllowed && inputAllowed && keyMonitorRunning && modelReady && !hexRunning && !pastingLastTranscript
     }
-    var isBusy: Bool { captureStart != nil || processing }
+    var isBusy: Bool { captureStart != nil || processing || pastingLastTranscript }
     var status: String {
         if captureVisible { return mode == .locked ? "Recording hands-free" : "Listening" }
         if let stage { return stage }
+        if pastingLastTranscript { return "Pasting" }
         if modelLoading { return "Loading Parakeet" }
         return canDictate ? "Ready to dictate" : "Finish setup to dictate"
     }
@@ -218,6 +220,21 @@ final class DictationController {
     func copyLastTranscript(original: Bool = false) {
         guard reloadHistory(), !lastTranscript.isEmpty else { return }
         TextInsertion.copy(original ? lastRawTranscript : lastTranscript)
+    }
+
+    func pasteLastTranscript(target: pid_t?) {
+        guard !isBusy, mode == .none, reloadHistory(), !lastTranscript.isEmpty else { return }
+        let text = lastTranscript
+        pastingLastTranscript = true
+        Task {
+            defer { pastingLastTranscript = false }
+            do {
+                // Let the status menu dismiss before sending Command-V.
+                try await Task.sleep(for: .milliseconds(100))
+                _ = try await TextInsertion.paste(text, target: target, cancellation: Cancellation())
+            } catch is CancellationError { }
+            catch { notice = "Could not paste the last transcription. \(error.localizedDescription)" }
+        }
     }
 
     func quitHex() {
