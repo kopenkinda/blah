@@ -13,11 +13,11 @@ actor Inference {
         transcribe_log_set({ _, _, _ in }, nil)
     }
 
-    func prepare(directory: String) throws {
-        let path = ModelFiles.url(ModelFiles.speech, in: directory).path
+    func prepare(directory: String, filename: String) throws {
+        let path = ModelFiles.url(filename, in: directory).path
         guard path != loadedPath else { return }
         guard FileManager.default.fileExists(atPath: path) else {
-            throw AppFailure("Parakeet is missing. Choose the folder containing your Hex models.")
+            throw AppFailure("The selected speech model is missing. Download it or choose an installed model in Settings.")
         }
         var parameters = transcribe_model_load_params()
         transcribe_model_load_params_init(&parameters)
@@ -30,9 +30,9 @@ actor Inference {
         loadedPath = path
     }
 
-    func transcribe(_ samples: [Float], directory: String, cancellation: Cancellation) throws -> String {
+    func transcribe(_ samples: [Float], directory: String, filename: String, cancellation: Cancellation) throws -> String {
         try cancellation.check()
-        try prepare(directory: directory)
+        try prepare(directory: directory, filename: filename)
         guard let session else { throw AppFailure("The speech model is not ready.") }
         try cancellation.check()
         let context = Unmanaged.passUnretained(cancellation).toOpaque()

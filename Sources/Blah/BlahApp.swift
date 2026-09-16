@@ -75,14 +75,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showSettings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 730),
-                                  styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-            window.title = "Blah"
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 740),
+                                  styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+            window.title = "Blah Settings"
+            window.minSize = NSSize(width: 860, height: 620)
             window.identifier = NSUserInterfaceItemIdentifier("settings")
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SettingsView(controller: controller))
+            // Let the hosting controller coordinate the split view's toolbar,
+            // safe area, and sidebar actions with the window.
+            window.contentViewController = NSHostingController(rootView: SettingsView(controller: controller))
             window.center()
-            window.setFrameAutosaveName("BlahSettings")
+            window.setFrameAutosaveName("BlahSettingsSidebar")
             settingsWindow = window
         }
         controller.reloadHistory()

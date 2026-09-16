@@ -42,12 +42,14 @@ final class Preferences {
     var key: DictationKey { didSet { save() } }
     var cleanup: CleanupOptions { didSet { save() } }
     var modelDirectory: String { didSet { save() } }
+    var speechModel: String { didSet { save() } }
     var orbPosition: OrbPosition { didSet { save() } }
 
     private struct Saved: Codable {
         var key: DictationKey
         var cleanup: CleanupOptions
         var modelDirectory: String
+        var speechModel: String?
         var orbPosition: OrbPosition?
     }
 
@@ -55,11 +57,13 @@ final class Preferences {
         let defaults = UserDefaults.standard
         if let data = defaults.data(forKey: "preferences"),
            let saved = try? JSONDecoder().decode(Saved.self, from: data) {
+            speechModel = saved.speechModel ?? ModelFiles.speech
             key = saved.key
             cleanup = saved.cleanup
             modelDirectory = saved.modelDirectory
             orbPosition = saved.orbPosition ?? .bottom
         } else {
+            speechModel = ModelFiles.speech
             key = .globe
             cleanup = CleanupOptions()
             orbPosition = .bottom
@@ -69,7 +73,7 @@ final class Preferences {
     }
 
     private func save() {
-        let saved = Saved(key: key, cleanup: cleanup, modelDirectory: modelDirectory, orbPosition: orbPosition)
+        let saved = Saved(key: key, cleanup: cleanup, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition)
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: "preferences")
         }

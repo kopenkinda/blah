@@ -55,8 +55,16 @@ Blah reads the existing model files from:
   s1-mini-q4_k_m.gguf
 ```
 
-Choose another folder in settings if you move them. Both models process English
-locally. Blah does not modify Hex's settings or model files.
+Settings has a native sidebar with General, Models, and Transcript History.
+General contains the dictation flow, keyboard binding, chosen models, formatting,
+and orb position. Models offers Parakeet Unified English, Parakeet v2, Parakeet v3,
+and S1-mini, with model-card links, download sizes, cancellation, and explicit
+selection. Downloads use pinned revisions and are verified by size and SHA-256
+before installation in the displayed folder. Existing files are never overwritten.
+Speech-model selection is saved and cannot change during recording or processing.
+Parakeet v3 supports 25 European languages; S1-mini formatting is for English.
+Blah continues to reuse your existing model folder. Choose another folder in
+Models if you move it. Blah does not modify Hex's settings or existing model files.
 
 S1-mini cleanup starts enabled with semi-casual styling, lists, and general
 context, matching the inspected Hex configuration. You can disable it or change
@@ -76,9 +84,14 @@ Every completed dictation is saved as one JSON object per line in this UTF-8 fil
 ~/Library/Application Support/Blah/history.jsonl
 ```
 
-Use **Open history** or **Show in Finder** in settings. Each entry contains
+Transcript History shows a searchable list, full text, the original transcription,
+and all stored metadata. Copy any entry from its detail pane. The file menu
+provides **Open history file** and **Show in Finder**. Refresh or refocus Settings
+to pick up external edits. Each entry contains
 `id`, `createdAt` as an ISO 8601
-timestamp, `rawText`, and final `text`. Edit entries or delete whole lines with
+timestamp, `rawText`, and final `text`. New entries also record `speechModel`,
+`formattingModel` when enabled, recording `duration` in seconds, and
+`formattingStatus`. Edit entries or delete whole lines with
 any text editor. Text line breaks are escaped inside each JSON record.
 
 There is no time-based expiry. Blah keeps the newest 2,000 entries, removing
@@ -156,7 +169,8 @@ The app has no test target or test suite.
 - `TextInsertion.swift` owns paste and clipboard restoration.
 - `BlahApp.swift` owns the native status item, its left/right-click behavior, and the settings window.
 - `TranscriptHistory.swift` appends completed transcripts to the editable local history file.
-- The remaining Swift files contain preferences, the app entry point, settings,
+- `ModelLibrary.swift` owns the supported model catalog and verified downloads.
+- The remaining Swift files contain preferences, settings,
   and the recording indicator.
 
 There is no cloud provider, HTTP server, command system, transcript database,

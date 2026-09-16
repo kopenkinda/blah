@@ -7,6 +7,10 @@ enum TranscriptHistory {
         var createdAt = Date()
         var rawText: String
         var text: String
+        var speechModel: String?
+        var formattingModel: String?
+        var duration: Double?
+        var formattingStatus: String?
     }
 
     static let url = FileManager.default.homeDirectoryForCurrentUser

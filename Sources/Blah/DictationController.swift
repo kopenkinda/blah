@@ -23,6 +23,8 @@ final class DictationController {
     var overlayNotice: String? {
         !captureVisible && stage == nil && !previewingOrb ? notice : nil
     }
+    var history: [TranscriptHistory.Entry] = []
+    var historyError: String?
     var lastTranscript = ""
     var lastRawTranscript = ""
     var level: Float = 0
@@ -50,10 +52,13 @@ final class DictationController {
     @ObservationIgnored private var audioObserver: NSObjectProtocol?
     @ObservationIgnored private var unsavedTranscript: TranscriptHistory.Entry?
 
+    var unsavedHistoryEntry: TranscriptHistory.Entry? { unsavedTranscript }
+
     private struct Job {
         var samples: [Float]
         var cleanup: CleanupOptions
         var directory: String
+        var speechModel: String
         var target: pid_t?
         var cancellation: Cancellation
     }
@@ -108,9 +113,10 @@ final class DictationController {
         modelReady = false
         modelLoading = true
         let directory = preferences.modelDirectory
+        let speechModel = preferences.speechModel
         Task {
             do {
-                try await inference.prepare(directory: directory)
+                try await inference.prepare(directory: directory, filename: speechModel)
                 modelReady = true
             } catch { notice = error.localizedDescription }
             modelLoading = false
@@ -170,6 +176,12 @@ final class DictationController {
         if !preferences.cleanup.enabled { Task { await inference.stopCleanup() } }
     }
 
+    func selectSpeechModel(_ filename: String) {
+        guard !isBusy, !modelLoading, mode == .none else { return }
+        preferences.speechModel = filename
+        prepareModel()
+    }
+
     func chooseModelFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -205,15 +217,19 @@ final class DictationController {
 
     @discardableResult func reloadHistory() -> Bool {
         do {
-            let entry = try unsavedTranscript ?? TranscriptHistory.load().last
+            history = try TranscriptHistory.load()
+            historyError = nil
+            let entry = unsavedTranscript ?? history.last
             lastTranscript = entry?.text ?? ""
             lastRawTranscript = entry?.rawText ?? ""
             return true
         } catch {
-            lastTranscript = ""
-            lastRawTranscript = ""
+            lastTranscript = unsavedTranscript?.text ?? ""
+            lastRawTranscript = unsavedTranscript?.rawText ?? ""
+            history = []
+            historyError = error.localizedDescription
             notice = "Could not read transcript history. \(error.localizedDescription)"
-            return false
+            return unsavedTranscript != nil
         }
     }
 
@@ -345,6 +361,7 @@ final class DictationController {
         let destination = target
         let cleanup = preferences.cleanup
         let directory = preferences.modelDirectory
+        let speechModel = preferences.speechModel
         endGesture()
         Task {
             defer {
@@ -362,7 +379,7 @@ final class DictationController {
                     notice = "Recording was too short. Hold the key a little longer."
                     return
                 }
-                jobs.append(Job(samples: samples, cleanup: cleanup, directory: directory, target: destination,
+                jobs.append(Job(samples: samples, cleanup: cleanup, directory: directory, speechModel: speechModel, target: destination,
                                 cancellation: cancellation))
                 queuedCount = jobs.count + (processing ? 1 : 0)
                 processQueue()
@@ -409,16 +426,19 @@ final class DictationController {
                 stage = "Transcribing"
                 updateOverlay()
                 do {
-                    let raw = try await inference.transcribe(job.samples, directory: job.directory, cancellation: job.cancellation)
+                    let raw = try await inference.transcribe(job.samples, directory: job.directory, filename: job.speechModel, cancellation: job.cancellation)
                     try job.cancellation.check()
                     guard !raw.isEmpty else { throw AppFailure("No speech was detected.") }
                     var text = raw
+                    var formattingStatus = "Off"
                     if job.cleanup.enabled {
                         stage = "Formatting"
                         do {
                             text = try await inference.clean(raw, options: job.cleanup, directory: job.directory,
                                                              cancellation: job.cancellation)
+                            formattingStatus = "Completed"
                         } catch {
+                            formattingStatus = "Failed; original retained"
                             try job.cancellation.check()
                             notice = "Cleanup failed. Used the original transcript. \(error.localizedDescription)"
                         }
@@ -427,13 +447,16 @@ final class DictationController {
                     stage = "Pasting"
                     lastRawTranscript = raw
                     lastTranscript = text
-                    let entry = TranscriptHistory.Entry(rawText: raw, text: text)
+                    let entry = TranscriptHistory.Entry(rawText: raw, text: text, speechModel: job.speechModel,
+                        formattingModel: job.cleanup.enabled ? ModelFiles.cleanup : nil,
+                        duration: Double(job.samples.count) / 16_000, formattingStatus: formattingStatus)
                     do {
                         try TranscriptHistory.append(entry)
                         unsavedTranscript = nil
+                        reloadHistory()
                     } catch {
                         unsavedTranscript = entry
-                        let message = "Could not save this transcript to history. You can still copy it from Last transcript. \(error.localizedDescription)"
+                        let message = "Could not save this transcript to history. You can still copy it from Transcript History. \(error.localizedDescription)"
                         notice = [notice, message].compactMap { $0 }.joined(separator: "\n\n")
                     }
                     // Clipboard-only completion is successful too. The transcript remains available in Settings.

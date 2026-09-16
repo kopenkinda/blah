@@ -2,206 +2,224 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var controller: DictationController
-    @State private var showTranscript = false
+    @State private var page: Page? = .general
+    @State private var library = ModelLibrary()
 
-    var body: some View {
-        @Bindable var preferences = controller.preferences
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Image(nsImage: NSImage(contentsOf: Bundle.main.bundleURL
-                    .appendingPathComponent("Contents/Resources/Blah.icns"))
-                    ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 54, height: 54)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Blah").font(.largeTitle.weight(.semibold))
-                    Text("Local dictation").foregroundStyle(.secondary)
-                }
-                Spacer()
-                if controller.modelLoading || controller.stage != nil {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Circle().fill(controller.canDictate ? .green : .orange).frame(width: 8, height: 8)
-                }
+    private enum Page: String, CaseIterable, Identifiable {
+        case general = "General", models = "Models", history = "Transcript History"
+        var id: String { rawValue }
+        var symbol: String {
+            switch self {
+            case .general: "gearshape"
+            case .models: "cpu"
+            case .history: "clock.arrow.circlepath"
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
-
-            Form {
-                if controller.hexRunning {
-                    Section {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Hex is still running")
-                                Text("Quit Hex so the two apps do not share your dictation key.")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("Quit Hex") { controller.quitHex() }
-                        }
-                    }
-                }
-
-                if !controller.microphoneAllowed || !controller.accessibilityAllowed || !controller.inputAllowed {
-                    Section("Allow access") {
-                        permissionRow("Microphone", detail: "Record while you dictate.", allowed: controller.microphoneAllowed,
-                                      action: controller.requestMicrophone)
-                        permissionRow("Input Monitoring", detail: "Use your dictation key in any app.", allowed: controller.inputAllowed,
-                                      action: controller.requestInput)
-                        permissionRow("Accessibility", detail: "Paste the transcript into your app.", allowed: controller.accessibilityAllowed,
-                                      action: controller.requestAccessibility)
-                    }
-                }
-
-                Section {
-                    Picker("Dictation key", selection: $preferences.key) {
-                        ForEach(DictationKey.choices, id: \.code) { key in
-                            Text(key.label).tag(key)
-                        }
-                    }
-                    .disabled(controller.isBusy)
-                    .onChange(of: preferences.key) { controller.changeKey() }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Hold to dictate. Release to finish.", systemImage: "hand.point.up.left")
-                        Label("Double-tap to stay on. Tap again to finish.", systemImage: "hand.tap")
-                    }
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 4)
-                } footer: {
-                    Text("Escape cancels. \(preferences.key.code == 63 ? "Set Press Globe key to Do Nothing in Keyboard settings." : "The selected key is reserved for dictation.")")
-                }
-
-                Section {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Orb position")
-                            Text(preferences.orbPosition.label)
-                                .font(.caption).foregroundStyle(.secondary)
-                            Button("Preview") { controller.previewOrb() }
-                                .padding(.top, 4)
-                        }
-                        Spacer()
-                        OrbPositionPicker(selection: $preferences.orbPosition) {
-                            controller.previewOrb()
-                        }
-                    }
-                    .padding(.vertical, 4)
-                } footer: {
-                    Text("The orb appears on the display containing your pointer and stays there until dictation finishes.")
-                }
-
-                Section {
-                    Toggle("Format with S1-mini by Superwhisper", isOn: $preferences.cleanup.enabled)
-                        .onChange(of: preferences.cleanup.enabled) { controller.cleanupChanged() }
-                    if preferences.cleanup.enabled {
-                        Picker("Style", selection: $preferences.cleanup.styling) {
-                            Text("Casual").tag("casual")
-                            Text("Semi-casual").tag("semi-casual")
-                            Text("Semi-formal").tag("semi-formal")
-                            Text("Formal").tag("formal")
-                        }
-                        Picker("Structure", selection: $preferences.cleanup.structure) {
-                            Text("Allow lists").tag("lists")
-                            Text("Prose").tag("prose")
-                        }
-                        Picker("Context", selection: $preferences.cleanup.context) {
-                            Text("General").tag("general")
-                            Text("Email").tag("email")
-                        }
-                    }
-                } footer: {
-                    Text("Cleans up fillers, punctuation and formatting. If cleanup fails, your original transcript is used.")
-                }
-
-                Section {
-                    LabeledContent("Transcription", value: "Parakeet Unified English")
-                    HStack {
-                        Label(controller.modelReady ? "Ready on this Mac" : controller.modelLoading ? "Loading model…" : "Model unavailable",
-                              systemImage: controller.modelReady ? "checkmark.circle.fill" : "internaldrive")
-                            .foregroundStyle(controller.modelReady ? .secondary : .primary)
-                        Spacer()
-                        if !controller.modelReady && !controller.modelLoading {
-                            Button("Retry") { controller.prepareModel() }
-                        }
-                        Button("Choose folder…") { controller.chooseModelFolder() }
-                            .disabled(controller.isBusy || controller.modelLoading)
-                    }
-                    if preferences.cleanup.enabled && !FileManager.default.fileExists(
-                        atPath: ModelFiles.url(ModelFiles.cleanup, in: preferences.modelDirectory).path
-                    ) {
-                        Text("S1-mini is missing from this folder. Cleanup will use the original transcript.")
-                            .font(.caption).foregroundStyle(.orange)
-                    }
-                } header: {
-                    Text("Local models")
-                } footer: {
-                    Text("English dictation. All audio and text processing happens on this Mac.")
-                }
-
-                if let notice = controller.notice {
-                    Section {
-                        HStack(alignment: .top) {
-                            Text(notice).font(.callout).textSelection(.enabled)
-                            Spacer()
-                            Button { controller.notice = nil } label: { Image(systemName: "xmark") }
-                                .buttonStyle(.plain).help("Dismiss")
-                        }
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Button("Open history") { controller.openHistory() }
-                        Button("Show in Finder") { controller.openHistory(reveal: true) }
-                    }
-                } header: {
-                    Text("Transcript history")
-                } footer: {
-                    Text("Keeps your latest 2,000 transcripts with no time limit. Open history.jsonl to edit or remove entries. Audio is never saved.")
-                }
-
-                if !controller.lastTranscript.isEmpty {
-                    Section {
-                        DisclosureGroup("Last transcript", isExpanded: $showTranscript) {
-                            ScrollView {
-                                Text(controller.lastTranscript).frame(maxWidth: .infinity, alignment: .leading)
-                                    .textSelection(.enabled).padding(.vertical, 4)
-                            }.frame(maxHeight: 140)
-                            HStack {
-                                Button("Copy") { controller.copyLastTranscript() }
-                                if controller.lastRawTranscript != controller.lastTranscript {
-                                    Button("Copy original") { controller.copyLastTranscript(original: true) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-
-            HStack {
-                Text(controller.status)
-                Spacer()
-                if controller.queuedCount > 1 { Text("\(controller.queuedCount) dictations queued") }
-                else { Text("Audio is never saved") }
-            }
-            .font(.caption).foregroundStyle(.secondary)
-            .padding(.horizontal, 28).padding(.vertical, 14)
         }
-        .frame(width: 560, height: 730)
-        .onAppear { controller.reloadHistory() }
     }
 
-    private func permissionRow(_ name: String, detail: String, allowed: Bool, action: @escaping () -> Void) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(name)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+    var body: some View {
+        NavigationSplitView {
+            List(Page.allCases, selection: $page) { item in
+                Label(item.rawValue, systemImage: item.symbol).tag(item)
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 205, max: 250)
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 7) {
+                    Circle().fill(controller.canDictate ? .green : .orange).frame(width: 6, height: 6)
+                    Text(controller.status).font(.caption).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }.padding(16)
+            }
+        } detail: {
+            VStack(spacing: 0) {
+                switch page ?? .general {
+                case .general: general
+                case .models: models
+                case .history: TranscriptHistoryView(controller: controller)
+                }
+                if let notice = controller.notice {
+                    HStack(alignment: .top) {
+                        Text(notice).font(.callout).textSelection(.enabled)
+                        Spacer()
+                        Button { controller.notice = nil } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.plain).help("Dismiss")
+                    }.padding().background(.quaternary.opacity(0.4))
+                }
+            }
+            .navigationTitle((page ?? .general).rawValue)
+        }
+        .frame(minWidth: 860, minHeight: 620)
+        .onAppear { refresh() }
+        .onChange(of: page) { refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+    }
+
+    private func refresh() {
+        controller.reloadHistory()
+        library.refresh(directory: controller.preferences.modelDirectory)
+    }
+
+    private var general: some View {
+        @Bindable var preferences = controller.preferences
+        return Form {
+            if controller.hexRunning {
+                Section {
+                    LabeledContent("Hex is still running") { Button("Quit Hex") { controller.quitHex() } }
+                    Text("Quit Hex so the two apps do not share your dictation key.").foregroundStyle(.secondary)
+                }
+            }
+            if !controller.microphoneAllowed || !controller.accessibilityAllowed || !controller.inputAllowed {
+                Section("Allow access") {
+                    permissionRow("Microphone", allowed: controller.microphoneAllowed, action: controller.requestMicrophone)
+                    permissionRow("Input Monitoring", allowed: controller.inputAllowed, action: controller.requestInput)
+                    permissionRow("Accessibility", allowed: controller.accessibilityAllowed, action: controller.requestAccessibility)
+                }
+            }
+            Section("Dictation flow") {
+                LabeledContent("Hold the key", value: "Release to transcribe")
+                LabeledContent("Double-tap the key", value: "Tap again to finish")
+                LabeledContent("Escape", value: "Cancel dictation")
+                Text("Speak → Transcribe\(preferences.cleanup.enabled ? " → Format" : "") → Paste")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("Dictation key", selection: $preferences.key) {
+                    ForEach(DictationKey.choices, id: \.code) { Text($0.label).tag($0) }
+                }
+                .disabled(controller.isBusy)
+                .onChange(of: preferences.key) { controller.changeKey() }
+                Button("Open Keyboard Settings…") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
+                }
+            } header: { Text("Keyboard") } footer: {
+                Text(preferences.key.code == 63 ? "Set Press Globe key to Do Nothing in macOS Keyboard settings." : "The selected key is reserved for dictation.")
+            }
+            Section("Chosen models") {
+                LabeledContent("Transcription", value: LocalModel.name(for: preferences.speechModel))
+                LabeledContent("Formatting", value: preferences.cleanup.enabled ? "S1-mini" : "Off")
+                Button("Manage models…") { page = .models }
+            }
+            Section {
+                Toggle("Format transcripts", isOn: $preferences.cleanup.enabled)
+                    .onChange(of: preferences.cleanup.enabled) { controller.cleanupChanged() }
+                if preferences.cleanup.enabled {
+                    Picker("Style", selection: $preferences.cleanup.styling) {
+                        Text("Casual").tag("casual")
+                        Text("Semi-casual").tag("semi-casual")
+                        Text("Semi-formal").tag("semi-formal")
+                        Text("Formal").tag("formal")
+                    }
+                    Picker("Structure", selection: $preferences.cleanup.structure) {
+                        Text("Allow lists").tag("lists")
+                        Text("Prose").tag("prose")
+                    }
+                    Picker("Context", selection: $preferences.cleanup.context) {
+                        Text("General").tag("general")
+                        Text("Email").tag("email")
+                    }
+                }
+            } header: { Text("Formatting") } footer: {
+                Text("S1-mini cleans up fillers, punctuation and formatting. If it fails, your original transcript is used.")
+            }
+            Section("Recording indicator") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Orb position")
+                        Text(preferences.orbPosition.label).font(.caption).foregroundStyle(.secondary)
+                        Button("Preview") { controller.previewOrb() }
+                    }
+                    Spacer()
+                    OrbPositionPicker(selection: $preferences.orbPosition) { controller.previewOrb() }
+                }
+                Text("Appears on the display containing your pointer.").font(.caption).foregroundStyle(.secondary)
+            }
+        }.formStyle(.grouped)
+    }
+
+    private var models: some View {
+        Form {
+            Section {
+                Text("Models run on your Mac. Download a model, then select Use to switch to it.")
+                LabeledContent("Transcription", value: controller.modelLoading ? "Loading…" : controller.modelReady ? "Ready" : "Unavailable")
+                if !controller.modelReady && !controller.modelLoading {
+                    Button("Retry selected model") { controller.prepareModel() }.disabled(controller.isBusy)
+                }
+            }
+            Section("Transcription") {
+                ForEach(LocalModel.catalog.filter { !$0.isFormatting }) { model in modelRow(model) }
+            }
+            Section {
+                ForEach(LocalModel.catalog.filter(\.isFormatting)) { model in modelRow(model) }
+                if controller.preferences.cleanup.enabled {
+                    Button("Turn off formatting") {
+                        controller.preferences.cleanup.enabled = false
+                        controller.cleanupChanged()
+                    }
+                }
+            } header: { Text("Formatting") } footer: {
+                Text("S1-mini is intended for English transcripts. Turn formatting off when dictating in another language.")
+            }
+            if let error = library.error {
+                Section { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            }
+            Section("Storage") {
+                Text(controller.preferences.modelDirectory).font(.callout).textSelection(.enabled)
+                HStack {
+                    Button("Choose folder…") {
+                        controller.chooseModelFolder()
+                        refresh()
+                    }.disabled(controller.isBusy || controller.modelLoading || library.downloading != nil)
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: controller.preferences.modelDirectory)
+                    }
+                    Button("Refresh") { refresh() }
+                }
+                Text("Existing models can be reused from this folder. Downloads are checked before installation.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }.formStyle(.grouped)
+    }
+
+    private func modelRow(_ model: LocalModel) -> some View {
+        let selected = model.isFormatting ? controller.preferences.cleanup.enabled : controller.preferences.speechModel == model.filename
+        let installed = library.installed.contains(model.id)
+        return HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(model.name).font(.headline)
+                Text(model.detail).font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file))
+                    Link("Model details", destination: model.source)
+                }.font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            if library.downloading == model.id {
+                VStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(library.status).font(.caption)
+                    Button("Cancel") { library.cancel() }
+                }
+            } else if installed {
+                if selected {
+                    Label("Selected", systemImage: "checkmark.circle.fill").foregroundStyle(.secondary)
+                } else {
+                    Button("Use") {
+                        if model.isFormatting {
+                            controller.preferences.cleanup.enabled = true
+                            controller.cleanupChanged()
+                        } else { controller.selectSpeechModel(model.filename) }
+                    }.disabled(controller.isBusy || controller.modelLoading)
+                }
+            } else {
+                Button("Download") { library.download(model, directory: controller.preferences.modelDirectory) }
+                    .disabled(library.downloading != nil)
+            }
+        }.padding(.vertical, 8)
+    }
+
+    private func permissionRow(_ name: String, allowed: Bool, action: @escaping () -> Void) -> some View {
+        LabeledContent(name) {
             if allowed { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Allowed") }
             else { Button("Allow…", action: action) }
         }
