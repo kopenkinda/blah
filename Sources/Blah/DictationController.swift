@@ -41,6 +41,9 @@ final class DictationController {
 
     @ObservationIgnored private let keys = KeyMonitor()
     @ObservationIgnored private let recorder = AudioRecorder()
+    @ObservationIgnored private let sounds = RecordingSounds()
+    @ObservationIgnored private var recorderReady = false
+    @ObservationIgnored private var activeStopSound: RecordingSound?
     @ObservationIgnored private let inference = Inference()
     @ObservationIgnored private var overlay: RecordingOverlay?
     @ObservationIgnored private var permissionTimer: Timer?
@@ -329,6 +332,10 @@ final class DictationController {
                         self.notice = message
                     }
                 }
+                if captureCancellation === cancellation, mode != .none, !cancellation.isCancelled {
+                    recorderReady = true
+                    playCaptureStart()
+                }
             } catch {
                 // Finalization owns cleanup once the gesture has ended.
                 if captureCancellation === cancellation, mode != .none {
@@ -367,6 +374,7 @@ final class DictationController {
         previewTimer?.cancel()
         previewingOrb = false
         captureVisible = true
+        playCaptureStart()
         overlay?.show()
         if meterTimer == nil {
             meterTimer = Timer.scheduledTimer(withTimeInterval: 0.06, repeats: true) { [weak self] _ in
@@ -378,7 +386,21 @@ final class DictationController {
         }
     }
 
+    private func playCaptureStart() {
+        guard recorderReady, captureVisible, activeStopSound == nil else { return }
+        activeStopSound = preferences.stopSound
+        sounds.play(preferences.startSound, volume: preferences.startSoundVolume)
+    }
+
+    func previewSound(starting: Bool) {
+        guard mode == .none, captureStart == nil else { return }
+        sounds.play(starting ? preferences.startSound : preferences.stopSound,
+                    volume: starting ? preferences.startSoundVolume : preferences.stopSoundVolume)
+    }
+
     private func endGesture() {
+        recorderReady = false
+        activeStopSound = nil
         gestureTimer?.cancel()
         gestureTimer = nil
         mode = .none
@@ -390,6 +412,7 @@ final class DictationController {
 
     private func finishCapture(at endTime: TimeInterval) {
         guard let captureStart, let cancellation = captureCancellation, mode != .none else { return }
+        let stopSound = activeStopSound
         let destination = target
         let cleanup = preferences.cleanup
         let directory = preferences.modelDirectory
@@ -406,6 +429,7 @@ final class DictationController {
             do {
                 try await captureStart.value
                 let samples = try await recorder.stop(at: endTime)
+                if let stopSound { sounds.play(stopSound, volume: preferences.stopSoundVolume) }
                 try cancellation.check()
                 guard samples.count >= 3_200 else {
                     notice = "Recording was too short. Hold the key a little longer."
@@ -424,11 +448,13 @@ final class DictationController {
         guard let cancellation = captureCancellation else { return }
         cancellation.cancel()
         guard let captureStart, mode != .none else { return }
+        let stopSound = activeStopSound
         endGesture()
         Task {
             do {
                 try await captureStart.value
                 _ = try? await recorder.stop()
+                if let stopSound { sounds.play(stopSound, volume: preferences.stopSoundVolume) }
             } catch { }
             guard captureCancellation === cancellation else { return }
             self.captureStart = nil

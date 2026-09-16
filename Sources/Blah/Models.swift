@@ -40,6 +40,10 @@ final class Preferences {
     var modelDirectory: String { didSet { save() } }
     var speechModel: String { didSet { save() } }
     var orbPosition: OrbPosition { didSet { save() } }
+    var startSound: RecordingSound { didSet { save() } }
+    var stopSound: RecordingSound { didSet { save() } }
+    var startSoundVolume: Double { didSet { save() } }
+    var stopSoundVolume: Double { didSet { save() } }
 
     private struct Saved: Codable {
         var microphonePriority: [Microphone]?
@@ -48,6 +52,11 @@ final class Preferences {
         var modelDirectory: String
         var speechModel: String?
         var orbPosition: OrbPosition?
+        var soundPack: String?
+        var startSound: RecordingSound?
+        var stopSound: RecordingSound?
+        var startSoundVolume: Double?
+        var stopSoundVolume: Double?
     }
 
     init() {
@@ -60,19 +69,35 @@ final class Preferences {
             cleanup = saved.cleanup
             modelDirectory = saved.modelDirectory
             orbPosition = saved.orbPosition ?? .bottom
+            // Migrate the original paired sound setting without resetting other preferences.
+            let legacySounds: (RecordingSound, RecordingSound)
+            switch saved.soundPack {
+            case "Pack A · Pop & Tink": legacySounds = (.pop, .frog)
+            case "Pack B · Bottle & Pop": legacySounds = (.bottle, .pop)
+            case "Pack C · Tink & Frog": legacySounds = (.tink, .frog)
+            default: legacySounds = (.off, .off)
+            }
+            startSound = saved.startSound ?? legacySounds.0
+            stopSound = saved.stopSound ?? legacySounds.1
+            startSoundVolume = min(1, max(0, saved.startSoundVolume ?? 0.3))
+            stopSoundVolume = min(1, max(0, saved.stopSoundVolume ?? 0.3))
         } else {
             microphonePriority = []
             speechModel = ModelFiles.speech
             key = .globe
             cleanup = CleanupOptions()
             orbPosition = .bottom
+            startSound = .off
+            stopSound = .off
+            startSoundVolume = 0.3
+            stopSoundVolume = 0.3
             modelDirectory = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/voice-control/models").path
         }
     }
 
     private func save() {
-        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition)
+        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume)
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: "preferences")
         }

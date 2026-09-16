@@ -175,6 +175,46 @@ struct SettingsView: View {
                     }
                 }
             }
+            Section {
+                HStack {
+                    Picker("Start sound", selection: $preferences.startSound) {
+                        ForEach(RecordingSound.allCases, id: \.self) { sound in
+                            Text(sound.rawValue).tag(sound)
+                        }
+                    }
+                    Button { controller.previewSound(starting: true) } label: {
+                        Image(systemName: "play.fill")
+                    }
+                    .help("Preview start sound").accessibilityLabel("Preview start sound")
+                    .disabled(preferences.startSound == .off || controller.mode != .none || controller.isBusy)
+                }
+                HStack {
+                    Slider(value: $preferences.startSoundVolume, in: 0...1, step: 0.01) { Text("Start volume") }
+                    Text(preferences.startSoundVolume, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit().frame(width: 42, alignment: .trailing)
+                }
+                .disabled(preferences.startSound == .off)
+                HStack {
+                    Picker("Stop sound", selection: $preferences.stopSound) {
+                        ForEach(RecordingSound.allCases, id: \.self) { sound in
+                            Text(sound.rawValue).tag(sound)
+                        }
+                    }
+                    Button { controller.previewSound(starting: false) } label: {
+                        Image(systemName: "play.fill")
+                    }
+                    .help("Preview stop sound").accessibilityLabel("Preview stop sound")
+                    .disabled(preferences.stopSound == .off || controller.mode != .none || controller.isBusy)
+                }
+                HStack {
+                    Slider(value: $preferences.stopSoundVolume, in: 0...1, step: 0.01) { Text("Stop volume") }
+                    Text(preferences.stopSoundVolume, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit().frame(width: 42, alignment: .trailing)
+                }
+                .disabled(preferences.stopSound == .off)
+            } header: { Text("Recording sounds") } footer: {
+                Text("macOS sounds when recording starts and stops. Volume is relative to your Mac's output level.")
+            }
             Section("Recording indicator") {
                 HStack {
                     VStack(alignment: .leading, spacing: 6) {

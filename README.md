@@ -51,6 +51,10 @@ This builds, signs, installs into `/Applications/Blah.app`, and launches it. Use
 
 Signing is automatic. The first build creates your own self-signed development certificate in a private keychain under `~/Library/Application Support/Blah/Signing`. Later builds reuse it so privacy permissions can survive updates. Keep that directory private and intact. No paid Apple Developer account or notarization is needed for this local build. The scripts do not change system certificate trust or your default keychain.
 
+## License
+
+[MIT](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for dependencies and model licenses.
+
 ## Why can't I just download the binary?
 
 Because I'm not paying Apple $100 a year for this shit. That's what Developer ID signing and notarization would cost, even for a free app. I could ship an unnotarized binary, but you'd still have to deal with macOS security warnings.
