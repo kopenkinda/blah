@@ -326,7 +326,7 @@ final class DictationController {
                 guard let microphone = preferredMicrophone else {
                     throw AppFailure(microphoneError ?? "No microphone is available. Connect a microphone and try again.")
                 }
-                try await recorder.start(deviceID: microphone.deviceID) { [weak self] message in
+                try await recorder.start(deviceUID: microphone.microphone.id) { [weak self] message in
                     Task { @MainActor in
                         guard let self, self.captureCancellation === cancellation, self.mode != .none else { return }
                         self.discardCapture()
