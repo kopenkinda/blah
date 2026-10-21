@@ -23,7 +23,22 @@ If formatting fails, Blah uses the original transcript. If it cannot paste, the 
 
 ## Models
 
-Download models in Settings → Models, then select them in General. Blah supports Parakeet Unified English, Parakeet v2, and multilingual Parakeet v3 for transcription. S1-mini by Superwhisper provides English formatting. Select Off to disable formatting.
+In Settings → Models, filter by the language you speak, download a model, then choose Use. You can also select downloaded models in General.
+
+| Model | Purpose | Languages | Download |
+| --- | --- | --- | --- |
+| Parakeet Unified English / v2 | Transcription | English | About 730 MB |
+| Parakeet v3 | Transcription | 25, including English, French, and Russian | 740 MB |
+| Whisper large-v3-turbo | Transcription | 100, including English, French, and Russian | 886 MB |
+| Qwen3-ASR 0.6B | Transcription | 30, including English, French, and Russian | 850 MB |
+| S1-mini by Superwhisper | Formatting | English only | 484 MB |
+| Qwen3 4B | Experimental formatting | Multilingual, including English, French, and Russian | 2.5 GB |
+
+Whisper and Qwen3-ASR let you choose the spoken language or detect it automatically. Parakeet v3 recognizes its supported languages automatically. For English spoken with a French or Russian accent, choose English. Language coverage does not guarantee accuracy for a particular accent; compare models on recordings from the people using them.
+
+Qwen3 4B is a general language model prompted to clean up text while preserving its language. It may rephrase more than S1-mini. S1-mini is specialized for English; Blah skips it when text language detection confidently identifies another language. Select Off to keep the transcript without model formatting. Failed formatting keeps the original transcript.
+
+The language lists follow the exact model versions: [Parakeet v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), [Whisper](https://github.com/openai/whisper/blob/main/whisper/tokenizer.py), [Qwen3-ASR](https://huggingface.co/Qwen/Qwen3-ASR-0.6B), [S1-mini](https://huggingface.co/superwhisper/s1-mini), and [Qwen3](https://qwenlm.github.io/blog/qwen3/). The Models page shows each model's full language list and source.
 
 Existing Hex models can be reused. The default folder is `~/Library/Application Support/voice-control/models`; choose another folder in Models if needed. Model weights are downloaded separately from the app. See [third-party notices](THIRD_PARTY_NOTICES.md) for the runtimes and model sources.
 

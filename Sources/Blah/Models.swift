@@ -16,9 +16,23 @@ struct DictationKey: Codable, Hashable, Sendable {
 
 struct CleanupOptions: Codable, Sendable {
     var enabled = true
+    var model = ModelFiles.cleanup
     var styling = "semi-casual"
     var structure = "lists"
     var context = "general"
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey { case enabled, model, styling, structure, context }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try values.decode(Bool.self, forKey: .enabled)
+        model = try values.decodeIfPresent(String.self, forKey: .model) ?? ModelFiles.cleanup
+        styling = try values.decode(String.self, forKey: .styling)
+        structure = try values.decode(String.self, forKey: .structure)
+        context = try values.decode(String.self, forKey: .context)
+    }
 }
 
 enum OrbPosition: Int, CaseIterable, Codable {
@@ -40,6 +54,7 @@ final class Preferences {
     var replacements: [TextReplacement] { didSet { save() } }
     var modelDirectory: String { didSet { save() } }
     var speechModel: String { didSet { save() } }
+    var speechLanguage: String { didSet { save() } }
     var orbPosition: OrbPosition { didSet { save() } }
     var startSound: RecordingSound { didSet { save() } }
     var stopSound: RecordingSound { didSet { save() } }
@@ -53,6 +68,7 @@ final class Preferences {
         var replacements: [TextReplacement]?
         var modelDirectory: String
         var speechModel: String?
+        var speechLanguage: String?
         var orbPosition: OrbPosition?
         var soundPack: String?
         var startSound: RecordingSound?
@@ -67,6 +83,7 @@ final class Preferences {
            let saved = try? JSONDecoder().decode(Saved.self, from: data) {
             microphonePriority = saved.microphonePriority ?? []
             speechModel = saved.speechModel ?? ModelFiles.speech
+            speechLanguage = saved.speechLanguage ?? "auto"
             key = saved.key
             cleanup = saved.cleanup
             replacements = saved.replacements ?? []
@@ -87,6 +104,7 @@ final class Preferences {
         } else {
             microphonePriority = []
             speechModel = ModelFiles.speech
+            speechLanguage = "auto"
             key = .globe
             cleanup = CleanupOptions()
             replacements = []
@@ -101,7 +119,7 @@ final class Preferences {
     }
 
     private func save() {
-        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, replacements: replacements, modelDirectory: modelDirectory, speechModel: speechModel, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume)
+        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, replacements: replacements, modelDirectory: modelDirectory, speechModel: speechModel, speechLanguage: speechLanguage, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume)
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: "preferences")
         }

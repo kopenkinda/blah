@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 actor Inference {
     private var session: OpaquePointer?
@@ -30,7 +31,7 @@ actor Inference {
         loadedPath = path
     }
 
-    func transcribe(_ samples: [Float], directory: String, filename: String, cancellation: Cancellation) throws -> String {
+    func transcribe(_ samples: [Float], directory: String, filename: String, language: String = "auto", cancellation: Cancellation) throws -> String {
         try cancellation.check()
         try prepare(directory: directory, filename: filename)
         guard let session else { throw AppFailure("The speech model is not ready.") }
@@ -45,8 +46,20 @@ actor Inference {
         transcribe_run_params_init(&parameters)
         var audio = samples
         if audio.count < 16_000 { audio.append(contentsOf: repeatElement(0, count: 16_000 - audio.count)) }
-        let result = audio.withUnsafeBufferPointer { buffer in
-            transcribe_run(session, buffer.baseAddress, Int32(buffer.count), &parameters)
+        let model = LocalModel.catalog.first { $0.filename == filename }
+        guard language == "auto" || model?.supports(language: language) == true else {
+            throw AppFailure("The selected speech model does not support this language. Choose another language or model in Settings.")
+        }
+        var hint = language
+        if filename.hasPrefix("whisper-") {
+            if hint == "fil" { hint = "tl" }
+            if hint == "jv" { hint = "jw" }
+        } else if filename.hasPrefix("Qwen3-ASR-") && hint == "tl" { hint = "fil" }
+        let result = hint.withCString { pointer in
+            parameters.language = language != "auto" && model?.acceptsLanguageSelection == true ? pointer : nil
+            return audio.withUnsafeBufferPointer { buffer in
+                transcribe_run(session, buffer.baseAddress, Int32(buffer.count), &parameters)
+            }
         }
         try cancellation.check()
         guard result == TRANSCRIBE_OK else { throw failure(result) }
@@ -56,16 +69,27 @@ actor Inference {
     func clean(_ transcript: String, options: CleanupOptions, directory: String,
                cancellation: Cancellation) throws -> String {
         try cancellation.check()
-        let modelPath = ModelFiles.url(ModelFiles.cleanup, in: directory).path
+        guard let model = LocalModel.catalog.first(where: { $0.filename == options.model && $0.isFormatting }) else {
+            throw AppFailure("The selected formatting model is unavailable. Used the original transcript.")
+        }
+        if options.model == ModelFiles.cleanup {
+            let recognizer = NLLanguageRecognizer()
+            recognizer.processString(transcript)
+            if let language = recognizer.dominantLanguage, language != .english,
+               recognizer.languageHypotheses(withMaximum: 1)[language, default: 0] >= 0.8 {
+                throw AppFailure("S1-mini supports English formatting only. Used the original transcript. Choose a multilingual formatter in Settings.")
+            }
+        }
+        let modelPath = ModelFiles.url(model.filename, in: directory).path
         if helper?.isRunning != true || helperPath != modelPath {
             stopCleanup()
             guard FileManager.default.fileExists(atPath: modelPath) else {
-                throw AppFailure("S1-mini is missing. Used the original transcript.")
+                throw AppFailure("\(model.name) is missing. Used the original transcript.")
             }
             let process = Process()
             process.executableURL = Bundle.main.executableURL?.deletingLastPathComponent()
                 .appendingPathComponent("BlahCleanup")
-            process.arguments = [modelPath]
+            process.arguments = [modelPath, options.model == ModelFiles.cleanup ? "s1" : "qwen3"]
             let input = Pipe()
             let output = Pipe()
             process.standardInput = input
@@ -78,13 +102,13 @@ actor Inference {
             helperPath = modelPath
         }
         guard let helper, let helperInput, let helperOutput else {
-            throw AppFailure("S1-mini could not start.")
+            throw AppFailure("\(model.name) could not start. Used the original transcript.")
         }
         cancellation.attach(helper)
         defer { cancellation.attach(nil) }
         // Termination closes stdout, releasing the blocking read on this actor.
         let deadline = DispatchWorkItem { if helper.isRunning { helper.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
+        DispatchQueue.global().asyncAfter(deadline: .now() + (options.model == ModelFiles.cleanup ? 30 : 60), execute: deadline)
         defer { deadline.cancel() }
         do {
             struct Request: Encodable {
@@ -101,7 +125,7 @@ actor Inference {
             var response = Data()
             while response.count < 128_000 {
                 guard let byte = try helperOutput.read(upToCount: 1), !byte.isEmpty else {
-                    throw AppFailure("S1-mini stopped or took too long. Used the original transcript.")
+                    throw AppFailure("\(model.name) stopped or took too long. Used the original transcript.")
                 }
                 if byte[0] == 10 { break }
                 response.append(byte)
@@ -110,7 +134,7 @@ actor Inference {
             struct Response: Decodable { var text: String?; var error: String? }
             let result = try JSONDecoder().decode(Response.self, from: response)
             guard let text = result.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
-                throw AppFailure(result.error ?? "S1-mini returned no text. Used the original transcript.")
+                throw AppFailure(result.error ?? "\(model.name) returned no text. Used the original transcript.")
             }
             return text
         } catch {
@@ -130,6 +154,6 @@ actor Inference {
     }
 
     private func failure(_ status: transcribe_status) -> AppFailure {
-        AppFailure("Parakeet: " + String(cString: transcribe_status_string(Int32(status.rawValue))))
+        AppFailure("Transcription: " + String(cString: transcribe_status_string(Int32(status.rawValue))))
     }
 }

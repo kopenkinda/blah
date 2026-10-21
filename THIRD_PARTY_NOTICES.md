@@ -13,6 +13,17 @@ Model weights are external files and are not included in the application:
 
 - Parakeet Unified English Q8_0:
   https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf
+- Parakeet v2 and v3 Q8_0:
+  https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v2-gguf
+  https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf
+- Whisper large-v3-turbo Q8_0:
+  https://huggingface.co/handy-computer/whisper-large-v3-turbo-gguf
+  Upstream model: https://huggingface.co/openai/whisper-large-v3-turbo
+- Qwen3-ASR 0.6B Q8_0:
+  https://huggingface.co/handy-computer/Qwen3-ASR-0.6B-gguf
+  Upstream model: https://huggingface.co/Qwen/Qwen3-ASR-0.6B
+- Qwen3 4B Q4_K_M:
+  https://huggingface.co/Qwen/Qwen3-4B-GGUF
 - S1-mini by Superwhisper Q4_K_M:
   https://huggingface.co/superwhisper/s1-mini-GGUF
   S1-mini has its own model license. The settings identify Superwhisper.

@@ -69,6 +69,7 @@ final class DictationController {
         var replacements: [TextReplacement]
         var directory: String
         var speechModel: String
+        var speechLanguage: String
         var target: pid_t?
         var cancellation: Cancellation
     }
@@ -211,6 +212,10 @@ final class DictationController {
     func selectSpeechModel(_ filename: String) {
         guard !isBusy, !modelLoading, mode == .none else { return }
         preferences.speechModel = filename
+        if let model = LocalModel.catalog.first(where: { $0.filename == filename }),
+           !model.acceptsLanguageSelection || !model.supports(language: preferences.speechLanguage) {
+            preferences.speechLanguage = "auto"
+        }
         prepareModel()
     }
 
@@ -219,7 +224,7 @@ final class DictationController {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose the folder containing your Parakeet and S1-mini GGUF files."
+        panel.message = "Choose the folder containing your downloaded GGUF models."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         preferences.modelDirectory = url.path
         prepareModel()
@@ -419,6 +424,7 @@ final class DictationController {
         let replacements = preferences.replacements
         let directory = preferences.modelDirectory
         let speechModel = preferences.speechModel
+        let speechLanguage = preferences.speechLanguage
         endGesture()
         Task {
             defer {
@@ -437,7 +443,7 @@ final class DictationController {
                     notice = "Recording was too short. Hold the key a little longer."
                     return
                 }
-                jobs.append(Job(samples: samples, cleanup: cleanup, replacements: replacements, directory: directory, speechModel: speechModel, target: destination,
+                jobs.append(Job(samples: samples, cleanup: cleanup, replacements: replacements, directory: directory, speechModel: speechModel, speechLanguage: speechLanguage, target: destination,
                                 cancellation: cancellation))
                 queuedCount = jobs.count + (processing ? 1 : 0)
                 processQueue()
@@ -486,7 +492,7 @@ final class DictationController {
                 stage = "Transcribing"
                 updateOverlay()
                 do {
-                    let raw = try await inference.transcribe(job.samples, directory: job.directory, filename: job.speechModel, cancellation: job.cancellation)
+                    let raw = try await inference.transcribe(job.samples, directory: job.directory, filename: job.speechModel, language: job.speechLanguage, cancellation: job.cancellation)
                     try job.cancellation.check()
                     guard !raw.isEmpty else { throw AppFailure("No speech was detected.") }
                     var text = raw
@@ -500,7 +506,7 @@ final class DictationController {
                         } catch {
                             formattingStatus = "Failed; original retained"
                             try job.cancellation.check()
-                            notice = "Cleanup failed. Using the original transcript."
+                            notice = error.localizedDescription
                         }
                     }
                     try job.cancellation.check()
@@ -509,7 +515,7 @@ final class DictationController {
                     lastRawTranscript = raw
                     lastTranscript = text
                     let entry = TranscriptHistory.Entry(rawText: raw, text: text, speechModel: job.speechModel,
-                        formattingModel: job.cleanup.enabled ? ModelFiles.cleanup : nil,
+                        formattingModel: job.cleanup.enabled ? job.cleanup.model : nil,
                         duration: Double(job.samples.count) / 16_000, formattingStatus: formattingStatus)
                     do {
                         try TranscriptHistory.append(entry)

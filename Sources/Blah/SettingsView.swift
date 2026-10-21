@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var library = ModelLibrary()
     @State private var loginStatus = SMAppService.mainApp.status
     @State private var loginError: String?
+    @State private var browseLanguage = "all"
 
     private enum Page: String, CaseIterable, Identifiable {
         case general = "General", models = "Models", replacements = "Replacements", history = "Transcript History"
@@ -146,14 +147,8 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(controller.isBusy || controller.modelLoading)
-                Picker("Formatting", selection: Binding(
-                    get: { preferences.cleanup.enabled },
-                    set: { preferences.cleanup.enabled = $0; controller.cleanupChanged() }
-                )) {
-                    Text("Off").tag(false)
-                    Text(library.installed.contains(ModelFiles.cleanup) ? "S1-mini" : "S1-mini · Not downloaded")
-                        .tag(true).disabled(!library.installed.contains(ModelFiles.cleanup))
-                }
+                speechLanguageControls
+                formattingModelPicker
                 if !controller.modelReady && !controller.modelLoading {
                     Button("Retry selected model") { controller.prepareModel() }.disabled(controller.isBusy)
                 }
@@ -232,6 +227,57 @@ struct SettingsView: View {
         }.formStyle(.grouped)
     }
 
+    @ViewBuilder
+    private var speechLanguageControls: some View {
+        @Bindable var preferences = controller.preferences
+        if let model = LocalModel.catalog.first(where: { $0.filename == preferences.speechModel }) {
+            Text(model.languageSummary).font(.caption).foregroundStyle(.secondary)
+            if model.acceptsLanguageSelection {
+                Picker("Spoken language", selection: $preferences.speechLanguage) {
+                    Text("Detect automatically").tag("auto")
+                    ForEach(model.languages.map(LocalModel.canonicalLanguage).sorted { LocalModel.languageName($0) < LocalModel.languageName($1) }, id: \.self) { language in
+                        Text(LocalModel.languageName(language)).tag(language)
+                    }
+                }
+                .disabled(controller.isBusy)
+                Text("Choose the language you speak in the recording. For English with a French or Russian accent, choose English.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(model.languages.count == 1 ? "Recognizes English only." : "Detects the spoken language automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var formattingModelPicker: some View {
+        @Bindable var preferences = controller.preferences
+        return Group {
+            Picker("Formatting", selection: Binding(
+                get: { preferences.cleanup.enabled ? preferences.cleanup.model : "off" },
+                set: { value in
+                    preferences.cleanup.enabled = value != "off"
+                    if value != "off" { preferences.cleanup.model = value }
+                    controller.cleanupChanged()
+                }
+            )) {
+                Text("Off").tag("off")
+                ForEach(LocalModel.catalog.filter { $0.isFormatting && library.installed.contains($0.id) }) { model in
+                    Text(model.name).tag(model.filename)
+                }
+                if preferences.cleanup.enabled && !library.installed.contains(preferences.cleanup.model) {
+                    Text("\(LocalModel.name(for: preferences.cleanup.model)) · Not downloaded")
+                        .tag(preferences.cleanup.model).disabled(true)
+                }
+            }
+            .disabled(controller.isBusy)
+            if preferences.cleanup.enabled,
+               let model = LocalModel.catalog.first(where: { $0.filename == preferences.cleanup.model }) {
+                Text(model.languageSummary).font(.caption).foregroundStyle(.secondary)
+                Text(model.detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var replacements: some View {
         @Bindable var preferences = controller.preferences
         return Form {
@@ -268,12 +314,29 @@ struct SettingsView: View {
     }
 
     private var models: some View {
-        Form {
+        let matchingModels = LocalModel.catalog.filter { browseLanguage == "all" || $0.supports(language: browseLanguage) }
+        return Form {
+            Section {
+                Picker("Language", selection: $browseLanguage) {
+                    Text("All languages").tag("all")
+                    ForEach(LocalModel.availableLanguages, id: \.self) { language in
+                        Text(LocalModel.languageName(language)).tag(language)
+                    }
+                }
+            } footer: {
+                Text("Filter by the language you dictate in. For accented English, choose English. Download a model, then choose Use to select it.")
+            }
             Section("Transcription") {
-                ForEach(LocalModel.catalog.filter { !$0.isFormatting }) { model in modelRow(model) }
+                if !matchingModels.contains(where: { !$0.isFormatting }) {
+                    Text("No transcription models for this language.").foregroundStyle(.secondary)
+                }
+                ForEach(matchingModels.filter { !$0.isFormatting }) { model in modelRow(model) }
             }
             Section("Formatting") {
-                ForEach(LocalModel.catalog.filter(\.isFormatting)) { model in modelRow(model) }
+                if !matchingModels.contains(where: \.isFormatting) {
+                    Text("No formatting models for this language. Use transcription with formatting off.").foregroundStyle(.secondary)
+                }
+                ForEach(matchingModels.filter(\.isFormatting)) { model in modelRow(model) }
             }
             if let error = library.error {
                 Section { Text(error).foregroundStyle(.red).textSelection(.enabled) }
@@ -296,9 +359,21 @@ struct SettingsView: View {
 
     private func modelRow(_ model: LocalModel) -> some View {
         let installed = library.installed.contains(model.id)
+        let selected = model.isFormatting
+            ? controller.preferences.cleanup.enabled && controller.preferences.cleanup.model == model.filename
+            : controller.preferences.speechModel == model.filename
         return HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(model.name).font(.headline)
+                if model.languages.count > 1 {
+                    DisclosureGroup(model.languageSummary) {
+                        Text(model.languageNames).font(.caption).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(.callout)
+                } else {
+                    Text(model.languageSummary).font(.callout)
+                }
                 Text(model.detail).font(.callout).foregroundStyle(.secondary)
                 HStack {
                     Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file))
@@ -313,7 +388,25 @@ struct SettingsView: View {
                     Button("Cancel") { library.cancel() }
                 }
             } else if installed {
-                Label("Downloaded", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                VStack(spacing: 6) {
+                    Label(selected ? "Selected" : "Downloaded", systemImage: "checkmark.circle")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if !selected {
+                        Button("Use") {
+                            if model.isFormatting {
+                                controller.preferences.cleanup.model = model.filename
+                                controller.preferences.cleanup.enabled = true
+                                controller.cleanupChanged()
+                            } else {
+                                controller.selectSpeechModel(model.filename)
+                                if browseLanguage != "all", model.acceptsLanguageSelection {
+                                    controller.preferences.speechLanguage = browseLanguage
+                                }
+                            }
+                        }
+                        .disabled(controller.isBusy || controller.modelLoading)
+                    }
+                }
             } else {
                 Button("Download") { library.download(model, directory: controller.preferences.modelDirectory) }
                     .disabled(library.downloading != nil)
