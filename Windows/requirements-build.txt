@@ -1,0 +1,4 @@
+-r requirements.txt
+pyinstaller==6.16.0
+cmake==3.31.6
+ninja==1.11.1.4

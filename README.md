@@ -2,7 +2,11 @@
 
 ![Blah: hold the key, speak while the particle orb appears, then release to insert the transcript into your app.](Artwork/readme/banner.png)
 
-A small native Swift dictation app for macOS 27, inspired by [Hex](https://github.com/kitlangton/Hex). Hold a key, speak, and paste the transcript into your app. Transcription and optional formatting run locally. This is a source-only project: build and sign your own copy.
+A small local dictation app for macOS 27 and Windows 10/11 x64, inspired by [Hex](https://github.com/kitlangton/Hex). Hold a key, speak, and paste the transcript into your app. Transcription and optional formatting run locally.
+
+**Windows:** see [Windows setup, portable exe builds and tests](Windows/README.md).
+The native Swift macOS app and its build/signing workflow are preserved. The
+instructions below describe macOS.
 
 > [!WARNING]
 > This application was built entirely with gpt-6-astra. Use it at your own risk.

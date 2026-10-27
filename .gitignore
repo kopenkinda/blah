@@ -2,4 +2,8 @@
 .DS_Store
 *.xcuserstate
 xcuserdata/
+dist/
+build/
+__pycache__/
+*.pyc
 
