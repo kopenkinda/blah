@@ -635,13 +635,15 @@ final class DictationController {
 
     private func updateOverlay() {
         noticeTimer?.cancel()
-        if captureVisible || stage != nil { overlay?.show() }
+        // A queued job sets its stage on the next turn of the run loop. Hiding in that gap
+        // made the indicator vanish for a moment between recording and transcribing.
+        if captureVisible || stage != nil || processing { overlay?.show() }
         else if notice != nil {
             overlay?.show()
             let duration: Duration = notice == "No speech was detected." ? .seconds(3) : .seconds(8)
             noticeTimer = Task {
                 try? await Task.sleep(for: duration)
-                guard !Task.isCancelled, !captureVisible, stage == nil else { return }
+                guard !Task.isCancelled, !captureVisible, stage == nil, !processing else { return }
                 overlay?.hide()
             }
         } else if !previewingOrb { overlay?.hide() }
