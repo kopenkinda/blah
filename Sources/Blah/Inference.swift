@@ -10,6 +10,7 @@ actor Inference {
     private var helperPath: String?
     private var idleUnload: Task<Void, Never>?
     private var idleTimeout: Duration? = .seconds(15 * 60)
+    private var lastRun: ContinuousClock.Instant?
 
     init() {
         signal(SIGPIPE, SIG_IGN)
@@ -31,6 +32,7 @@ actor Inference {
         if let session { transcribe_session_free(session) }
         session = replacement
         loadedPath = path
+        lastRun = nil
         scheduleUnload()
     }
 
@@ -67,6 +69,7 @@ actor Inference {
         }
         try cancellation.check()
         guard result == TRANSCRIBE_OK else { throw failure(result) }
+        lastRun = .now
         return String(cString: transcribe_full_text(session)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -85,27 +88,7 @@ actor Inference {
                 throw AppFailure("S1-mini supports English formatting only. Used the original transcript. Choose a multilingual formatter in Settings.")
             }
         }
-        let modelPath = ModelFiles.url(model.filename, in: directory).path
-        if helper?.isRunning != true || helperPath != modelPath {
-            stopCleanup()
-            guard FileManager.default.fileExists(atPath: modelPath) else {
-                throw AppFailure("\(model.name) is missing. Used the original transcript.")
-            }
-            let process = Process()
-            process.executableURL = Bundle.main.executableURL?.deletingLastPathComponent()
-                .appendingPathComponent("BlahCleanup")
-            process.arguments = [modelPath, options.model == ModelFiles.cleanup ? "s1" : "qwen3"]
-            let input = Pipe()
-            let output = Pipe()
-            process.standardInput = input
-            process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
-            try process.run()
-            helper = process
-            helperInput = input.fileHandleForWriting
-            helperOutput = output.fileHandleForReading
-            helperPath = modelPath
-        }
+        try startCleanup(model, directory: directory)
         guard let helper, let helperInput, let helperOutput else {
             throw AppFailure("\(model.name) could not start. Used the original transcript.")
         }
@@ -152,6 +135,45 @@ actor Inference {
         }
     }
 
+    /// Readies both models when recording starts, so their warm-up overlaps speech
+    /// instead of delaying the paste.
+    func warm(directory: String, speechModel: String, cleanup: CleanupOptions?) {
+        if let cleanup, cleanup.enabled,
+           let model = LocalModel.catalog.first(where: { $0.filename == cleanup.model && $0.isFormatting }) {
+            try? startCleanup(model, directory: directory)
+        }
+        // Metal pages model weights out after a few idle minutes, and the first run also
+        // builds compute graphs. A short silent run pays both costs ahead of time.
+        if let lastRun, ContinuousClock.now - lastRun < .seconds(60) { return }
+        _ = try? transcribe([Float](repeating: 0, count: 24_000), directory: directory, filename: speechModel,
+                            cancellation: Cancellation())
+    }
+
+    /// The helper loads its model on launch, so starting it early hides the load.
+    private func startCleanup(_ model: LocalModel, directory: String) throws {
+        let modelPath = ModelFiles.url(model.filename, in: directory).path
+        guard helper?.isRunning != true || helperPath != modelPath else { return }
+        stopCleanup()
+        guard FileManager.default.fileExists(atPath: modelPath) else {
+            throw AppFailure("\(model.name) is missing. Used the original transcript.")
+        }
+        let process = Process()
+        process.executableURL = Bundle.main.executableURL?.deletingLastPathComponent()
+            .appendingPathComponent("BlahCleanup")
+        process.arguments = [modelPath, model.filename == ModelFiles.cleanup ? "s1" : "qwen3"]
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        helper = process
+        helperInput = input.fileHandleForWriting
+        helperOutput = output.fileHandleForReading
+        helperPath = modelPath
+        scheduleUnload()
+    }
+
     func stopCleanup() {
         try? helperInput?.close()
         if let helper, helper.isRunning { helper.terminate() }
@@ -187,6 +209,7 @@ actor Inference {
         if let session { transcribe_session_free(session) }
         session = nil
         loadedPath = nil
+        lastRun = nil
     }
 
     private func failure(_ status: transcribe_status) -> AppFailure {

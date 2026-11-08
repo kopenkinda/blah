@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import CoreMedia
 import Foundation
@@ -285,6 +286,19 @@ extension AudioRecorder: AVCaptureAudioDataOutputSampleBufferDelegate {
                 drain = nil
             }
         }
+    }
+
+    /// RMS of the loudest 30 ms window. 0.00316 is -50 dBFS, well below a whisper (Hex's threshold).
+    static func loudestWindow(_ samples: [Float]) -> Float {
+        var loudest: Float = 0
+        samples.withUnsafeBufferPointer { buffer in
+            for start in stride(from: 0, to: buffer.count, by: 480) {
+                var rms: Float = 0
+                vDSP_rmsqv(buffer.baseAddress! + start, 1, &rms, vDSP_Length(min(480, buffer.count - start)))
+                loudest = max(loudest, rms)
+            }
+        }
+        return loudest
     }
 
     /// The exact PCM layout the audioSettings request: 16 kHz, one channel,

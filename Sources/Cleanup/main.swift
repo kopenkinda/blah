@@ -104,6 +104,10 @@ guard let model = llama_model_load_from_file(CommandLine.arguments[1], modelPara
     exit(1)
 }
 defer { llama_model_free(model) }
+// Blah starts this helper when recording begins. One tiny request allocates the Metal
+// buffers and compute graphs while the person is still speaking.
+_ = try? clean(Request(transcript: "Hello.", styling: "casual", structure: "prose", context: "general"),
+               model: model, profile: CommandLine.arguments[2])
 while let line = readLine() {
     do {
         let request = try JSONDecoder().decode(Request.self, from: Data(line.utf8))

@@ -129,6 +129,8 @@ final class DictationController {
                 await agent.setIdleTimeout(timeout)
                 try await inference.prepare(directory: directory, filename: speechModel)
                 modelReady = true
+                modelLoading = false
+                await inference.warm(directory: directory, speechModel: speechModel, cleanup: nil)
             } catch { notice = error.localizedDescription }
             modelLoading = false
         }
@@ -337,10 +339,14 @@ final class DictationController {
     private func startCapture(at time: TimeInterval, after previousStart: Task<Void, Error>? = nil) {
         notice = nil
         target = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        // Agent startup overlaps with speaking instead of delaying the paste.
-        if preferences.cleanup.enabled && preferences.cleanup.isAgent {
-            let command = preferences.cleanup.agentCommand
-            Task { [agent] in try? await agent.prepare(command: command) }
+        // Model, formatter, and clipboard work overlaps with speaking instead of delaying the paste.
+        TextInsertion.prepare()
+        let cleanup = preferences.cleanup
+        let directory = preferences.modelDirectory
+        let speechModel = preferences.speechModel
+        Task { [inference] in await inference.warm(directory: directory, speechModel: speechModel, cleanup: cleanup) }
+        if cleanup.enabled && cleanup.isAgent {
+            Task { [agent] in try? await agent.prepare(command: cleanup.agentCommand) }
         }
         pressedAt = time
         mode = .held
@@ -469,6 +475,11 @@ final class DictationController {
                 try cancellation.check()
                 guard samples.count >= 3_200 else {
                     notice = "Recording was too short. Hold the key a little longer."
+                    return
+                }
+                // Models invent phrases such as "Thank you" on silence, so near-silent clips skip transcription.
+                guard AudioRecorder.loudestWindow(samples) >= 0.003_16 else {
+                    notice = "No speech was detected."
                     return
                 }
                 jobs.append(Job(samples: samples, cleanup: cleanup, replacements: replacements, directory: directory, speechModel: speechModel, speechLanguage: speechLanguage, target: destination,
