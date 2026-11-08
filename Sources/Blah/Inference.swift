@@ -109,8 +109,8 @@ actor Inference {
         guard let helper, let helperInput, let helperOutput else {
             throw AppFailure("\(model.name) could not start. Used the original transcript.")
         }
-        cancellation.attach(helper)
-        defer { cancellation.attach(nil) }
+        cancellation.onCancel { if helper.isRunning { helper.terminate() } }
+        defer { cancellation.onCancel(nil) }
         // Termination closes stdout, releasing the blocking read on this actor.
         let deadline = DispatchWorkItem { if helper.isRunning { helper.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + (options.model == ModelFiles.cleanup ? 30 : 60), execute: deadline)

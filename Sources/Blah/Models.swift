@@ -20,10 +20,26 @@ struct CleanupOptions: Codable, Sendable {
     var styling = "semi-casual"
     var structure = "lists"
     var context = "general"
+    var onlineURL = "https://api.openai.com/v1"
+    var onlineModel = ""
+    var agentCommand = CleanupOptions.agentPresets[0].command
+    /// Instructions for online and agent formatting. Nil uses the default built from the style settings.
+    var prompt: String?
+
+    static let agentPresets = [(name: "Codex", command: "CODEX_PATH=$(whence -p codex) npx -y @agentclientprotocol/codex-acp"),
+                               (name: "Pi", command: "npx -y pi-acp")]
+    var isOnline: Bool { model == ModelFiles.online }
+    var isAgent: Bool { model == ModelFiles.agent }
+    /// Shown in transcript history.
+    var label: String {
+        isOnline ? "Online · \(onlineModel)" : isAgent ? "Agent · \(agentCommand)" : model
+    }
 
     init() {}
 
-    private enum CodingKeys: String, CodingKey { case enabled, model, styling, structure, context }
+    private enum CodingKeys: String, CodingKey {
+        case enabled, model, styling, structure, context, onlineURL, onlineModel, agentCommand, prompt
+    }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -32,6 +48,10 @@ struct CleanupOptions: Codable, Sendable {
         styling = try values.decode(String.self, forKey: .styling)
         structure = try values.decode(String.self, forKey: .structure)
         context = try values.decode(String.self, forKey: .context)
+        onlineURL = try values.decodeIfPresent(String.self, forKey: .onlineURL) ?? onlineURL
+        onlineModel = try values.decodeIfPresent(String.self, forKey: .onlineModel) ?? onlineModel
+        agentCommand = try values.decodeIfPresent(String.self, forKey: .agentCommand) ?? agentCommand
+        prompt = try values.decodeIfPresent(String.self, forKey: .prompt)
     }
 }
 
@@ -135,6 +155,9 @@ final class Preferences {
 enum ModelFiles {
     static let speech = "parakeet-unified-en-0.6b-Q8_0.gguf"
     static let cleanup = "s1-mini-q4_k_m.gguf"
+    // Formatting choices that are not local model files.
+    static let online = "online"
+    static let agent = "agent"
     static func url(_ filename: String, in directory: String) -> URL {
         URL(fileURLWithPath: directory).appendingPathComponent(filename)
     }
@@ -144,22 +167,25 @@ enum ModelFiles {
 final class Cancellation: @unchecked Sendable {
     private let lock = NSLock()
     private var stopped = false
-    private var process: Process?
+    private var action: (@Sendable () -> Void)?
 
     var isCancelled: Bool { lock.withLock { stopped } }
 
     func cancel() {
-        lock.withLock {
+        let action = lock.withLock {
             stopped = true
-            if let process, process.isRunning { process.terminate() }
+            return self.action
         }
+        action?()
     }
 
-    func attach(_ process: Process?) {
-        lock.withLock {
-            self.process = process
-            if stopped, let process, process.isRunning { process.terminate() }
+    /// Runs `action` on cancellation, or immediately if already cancelled. Nil detaches it.
+    func onCancel(_ action: (@Sendable () -> Void)?) {
+        let runNow = lock.withLock {
+            self.action = action
+            return stopped
         }
+        if runNow { action?() }
     }
 
     func check() throws {

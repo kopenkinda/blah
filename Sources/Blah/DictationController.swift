@@ -45,6 +45,7 @@ final class DictationController {
     @ObservationIgnored private var recorderReady = false
     @ObservationIgnored private var activeStopSound: RecordingSound?
     @ObservationIgnored private let inference = Inference()
+    @ObservationIgnored private let agent = AgentFormatter()
     @ObservationIgnored private var overlay: RecordingOverlay?
     @ObservationIgnored private var permissionTimer: Timer?
     @ObservationIgnored private var meterTimer: Timer?
@@ -125,6 +126,7 @@ final class DictationController {
         Task {
             do {
                 await inference.setIdleTimeout(timeout)
+                await agent.setIdleTimeout(timeout)
                 try await inference.prepare(directory: directory, filename: speechModel)
                 modelReady = true
             } catch { notice = error.localizedDescription }
@@ -218,11 +220,16 @@ final class DictationController {
     func setUnloadAfter(minutes: Int) {
         preferences.unloadAfterMinutes = minutes
         let timeout = idleTimeout
-        Task { await inference.setIdleTimeout(timeout) }
+        Task {
+            await inference.setIdleTimeout(timeout)
+            await agent.setIdleTimeout(timeout)
+        }
     }
 
     func cleanupChanged() {
-        if !preferences.cleanup.enabled { Task { await inference.stopCleanup() } }
+        let cleanup = preferences.cleanup
+        if !cleanup.enabled || cleanup.isOnline || cleanup.isAgent { Task { await inference.stopCleanup() } }
+        if !cleanup.enabled || !cleanup.isAgent { Task { await agent.stop() } }
     }
 
     func selectSpeechModel(_ filename: String) {
@@ -330,6 +337,11 @@ final class DictationController {
     private func startCapture(at time: TimeInterval, after previousStart: Task<Void, Error>? = nil) {
         notice = nil
         target = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        // Agent startup overlaps with speaking instead of delaying the paste.
+        if preferences.cleanup.enabled && preferences.cleanup.isAgent {
+            let command = preferences.cleanup.agentCommand
+            Task { [agent] in try? await agent.prepare(command: command) }
+        }
         pressedAt = time
         mode = .held
         let cancellation = Cancellation()
@@ -516,8 +528,20 @@ final class DictationController {
                     if job.cleanup.enabled {
                         stage = "Formatting"
                         do {
-                            text = try await inference.clean(raw, options: job.cleanup, directory: job.directory,
-                                                             cancellation: job.cancellation)
+                            let options = job.cleanup
+                            if options.isOnline {
+                                text = try await RemoteFormatting.run(job.cancellation, seconds: 30, failure: "Online formatting") {
+                                    try await OnlineFormatter.clean(raw, options: options)
+                                }
+                            } else if options.isAgent {
+                                let agent = agent
+                                text = try await RemoteFormatting.run(job.cancellation, seconds: 90, failure: "The agent") {
+                                    try await agent.clean(raw, options: options)
+                                }
+                            } else {
+                                text = try await inference.clean(raw, options: options, directory: job.directory,
+                                                                 cancellation: job.cancellation)
+                            }
                             formattingStatus = "Completed"
                         } catch {
                             formattingStatus = "Failed; original retained"
@@ -531,7 +555,7 @@ final class DictationController {
                     lastRawTranscript = raw
                     lastTranscript = text
                     let entry = TranscriptHistory.Entry(rawText: raw, text: text, speechModel: job.speechModel,
-                        formattingModel: job.cleanup.enabled ? job.cleanup.model : nil,
+                        formattingModel: job.cleanup.enabled ? job.cleanup.label : nil,
                         duration: Double(job.samples.count) / 16_000, formattingStatus: formattingStatus)
                     do {
                         history = try TranscriptHistory.append(entry)
@@ -551,7 +575,8 @@ final class DictationController {
             }
             processing = false
             stage = nil
-            if !preferences.cleanup.enabled { await inference.stopCleanup() }
+            let cleanup = preferences.cleanup
+            if !cleanup.enabled || cleanup.isOnline || cleanup.isAgent { await inference.stopCleanup() }
             updateOverlay()
         }
     }
@@ -597,6 +622,6 @@ final class DictationController {
         previewTimer?.cancel()
         currentJob?.cancellation.cancel()
         jobs.forEach { $0.cancellation.cancel() }
-        // The cleanup child exits on stdin EOF when the app exits.
+        // The cleanup helper and agent exit on stdin EOF when the app exits.
     }
 }

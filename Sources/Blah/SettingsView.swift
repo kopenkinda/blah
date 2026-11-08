@@ -9,6 +9,8 @@ struct SettingsView: View {
     @State private var loginStatus = SMAppService.mainApp.status
     @State private var loginError: String?
     @State private var browseLanguage = "all"
+    @State private var onlineKey = Keychain.read(Keychain.apiKey) ?? ""
+    @State private var agentVariables = AgentVariable.load()
 
     private enum Page: String, CaseIterable, Identifiable {
         case general = "General", models = "Models", replacements = "Replacements", history = "Transcript History"
@@ -169,7 +171,64 @@ struct SettingsView: View {
                      ? "Models stay in memory while Blah is running."
                      : "Frees model memory after a period without dictation. The next dictation takes longer while models load.")
             }
-            if preferences.cleanup.enabled {
+            if preferences.cleanup.enabled && preferences.cleanup.isOnline {
+                Section {
+                    TextField("Base URL", text: $preferences.cleanup.onlineURL, prompt: Text("https://api.openai.com/v1"))
+                    TextField("Model", text: $preferences.cleanup.onlineModel, prompt: Text("Model ID"))
+                    SecureField("API key", text: $onlineKey, prompt: Text("Stored in your Keychain"))
+                        .onChange(of: onlineKey) { Keychain.write(Keychain.apiKey, onlineKey) }
+                } header: { Text("Online formatting") } footer: {
+                    Text("Sends each transcript to this endpoint's Responses API. Works with OpenAI, Codex subscription proxies, and other servers that support /v1/responses. A fast model without heavy reasoning keeps pasting quick.")
+                }
+            }
+            if preferences.cleanup.enabled && preferences.cleanup.isAgent {
+                Section {
+                    TextField("Command", text: $preferences.cleanup.agentCommand)
+                        .fontDesign(.monospaced)
+                    HStack {
+                        ForEach(CleanupOptions.agentPresets, id: \.name) { preset in
+                            Button("Use \(preset.name)") {
+                                preferences.cleanup.agentCommand = preset.command
+                                controller.cleanupChanged()
+                            }
+                        }
+                    }
+                } header: { Text("Agent formatting") } footer: {
+                    Text("Runs an Agent Client Protocol adapter in a non-interactive login shell, using that agent's own sign-in and model settings. It starts when you begin recording and stays ready between dictations. Each dictation uses a new session in an empty folder, which Blah deletes afterwards. Blah tells the agent not to use tools and declines its permission requests, but some agents run tools without asking.")
+                }
+                Section {
+                    ForEach($agentVariables) { $variable in
+                        HStack {
+                            TextField("Name", text: $variable.name, prompt: Text("NAME"))
+                                .fontDesign(.monospaced).frame(maxWidth: 200)
+                            SecureField("Value", text: $variable.value, prompt: Text("Value"))
+                            Button(role: .destructive) {
+                                agentVariables.removeAll { $0.id == variable.id }
+                            } label: { Image(systemName: "trash") }
+                            .help("Delete variable").accessibilityLabel("Delete \(variable.name)")
+                        }
+                        .labelsHidden()
+                    }
+                    Button("Add variable", systemImage: "plus") { agentVariables.append(AgentVariable()) }
+                } header: { Text("Environment variables") } footer: {
+                    Text("Passed to the agent, for example the API key its provider reads. Values are stored in your Keychain. Changes apply to the next dictation.")
+                }
+                .onChange(of: agentVariables) { AgentVariable.save(agentVariables) }
+            }
+            if preferences.cleanup.enabled && (preferences.cleanup.isOnline || preferences.cleanup.isAgent) {
+                Section {
+                    TextEditor(text: Binding(
+                        get: { RemoteFormatting.instructions(preferences.cleanup) },
+                        set: { preferences.cleanup.prompt = $0 }
+                    ))
+                    .font(.callout).frame(minHeight: 160)
+                    if preferences.cleanup.prompt != nil {
+                        Button("Restore default") { preferences.cleanup.prompt = nil }
+                    }
+                } header: { Text("Instructions") } footer: {
+                    Text("Sent with every transcript. Blah adds the transcript itself, and for agents a request not to use tools.")
+                }
+            } else if preferences.cleanup.enabled {
                 Section("Formatting") {
                     Picker("Style", selection: $preferences.cleanup.styling) {
                         Text("Casual").tag("casual")
@@ -279,7 +338,10 @@ struct SettingsView: View {
                 ForEach(LocalModel.catalog.filter { $0.isFormatting && library.installed.contains($0.id) }) { model in
                     Text(model.name).tag(model.filename)
                 }
-                if preferences.cleanup.enabled && !library.installed.contains(preferences.cleanup.model) {
+                Text("Online (OpenAI-compatible)").tag(ModelFiles.online)
+                Text("Agent (ACP)").tag(ModelFiles.agent)
+                if preferences.cleanup.enabled && !preferences.cleanup.isOnline && !preferences.cleanup.isAgent
+                    && !library.installed.contains(preferences.cleanup.model) {
                     Text("\(LocalModel.name(for: preferences.cleanup.model)) · Not downloaded")
                         .tag(preferences.cleanup.model).disabled(true)
                 }
