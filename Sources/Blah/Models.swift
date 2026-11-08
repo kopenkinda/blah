@@ -22,23 +22,27 @@ struct CleanupOptions: Codable, Sendable {
     var context = "general"
     var onlineURL = "https://api.openai.com/v1"
     var onlineModel = ""
-    var agentCommand = CleanupOptions.agentPresets[0].command
+    var agent = Agent.codex
+    /// The adapter command for a custom agent.
+    var agentCommand = ""
     /// Instructions for online and agent formatting. Nil uses the default built from the style settings.
     var prompt: String?
 
-    static let agentPresets = [(name: "Codex", command: "CODEX_PATH=$(whence -p codex) npx -y @agentclientprotocol/codex-acp"),
-                               (name: "Pi", command: "npx -y pi-acp")]
+    enum Agent: String, Codable, CaseIterable {
+        case codex, pi, custom
+        var name: String { ["Codex", "Pi", "Custom"][Self.allCases.firstIndex(of: self)!] }
+    }
     var isOnline: Bool { model == ModelFiles.online }
     var isAgent: Bool { model == ModelFiles.agent }
     /// Shown in transcript history.
     var label: String {
-        isOnline ? "Online · \(onlineModel)" : isAgent ? "Agent · \(agentCommand)" : model
+        isOnline ? "Online · \(onlineModel)" : isAgent ? "Agent · \(agent == .custom ? agentCommand : agent.name)" : model
     }
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, model, styling, structure, context, onlineURL, onlineModel, agentCommand, prompt
+        case enabled, model, styling, structure, context, onlineURL, onlineModel, agent, agentCommand, prompt
     }
 
     init(from decoder: Decoder) throws {
@@ -53,6 +57,9 @@ struct CleanupOptions: Codable, Sendable {
         onlineURL = try values.decodeIfPresent(String.self, forKey: .onlineURL) ?? onlineURL
         onlineModel = try values.decodeIfPresent(String.self, forKey: .onlineModel) ?? onlineModel
         agentCommand = try values.decodeIfPresent(String.self, forKey: .agentCommand) ?? agentCommand
+        // Early builds stored only a command; recognize the presets it held.
+        agent = try values.decodeIfPresent(Agent.self, forKey: .agent)
+            ?? (agentCommand.contains("pi-acp") ? .pi : agentCommand.isEmpty || agentCommand.contains("codex-acp") ? .codex : .custom)
         prompt = try values.decodeIfPresent(String.self, forKey: .prompt)
     }
 }

@@ -11,6 +11,8 @@ struct SettingsView: View {
     @State private var browseLanguage = "all"
     @State private var onlineKey = Keychain.read(Keychain.apiKey) ?? ""
     @State private var agentVariables = AgentVariable.load()
+    @State private var testResult: (passed: Bool, message: String)?
+    @State private var testing = false
 
     private enum Page: String, CaseIterable, Identifiable {
         case general = "General", models = "Models", replacements = "Replacements", history = "Transcript History"
@@ -177,24 +179,33 @@ struct SettingsView: View {
                     TextField("Model", text: $preferences.cleanup.onlineModel, prompt: Text("Model ID"))
                     SecureField("API key", text: $onlineKey, prompt: Text("Stored in your Keychain"))
                         .onChange(of: onlineKey) { Keychain.write(Keychain.apiKey, onlineKey) }
+                    formattingTest
                 } header: { Text("Online formatting") } footer: {
-                    Text("Sends each transcript to this endpoint's Responses API. Works with OpenAI, Codex subscription proxies, and other servers that support /v1/responses. A fast model without heavy reasoning keeps pasting quick.")
+                    Text("Works with OpenAI and any server that supports its Responses API, including Codex subscription proxies. Pick a fast model; formatting needs little reasoning.")
                 }
             }
             if preferences.cleanup.enabled && preferences.cleanup.isAgent {
                 Section {
-                    TextField("Command", text: $preferences.cleanup.agentCommand)
-                        .fontDesign(.monospaced)
-                    HStack {
-                        ForEach(CleanupOptions.agentPresets, id: \.name) { preset in
-                            Button("Use \(preset.name)") {
-                                preferences.cleanup.agentCommand = preset.command
-                                controller.cleanupChanged()
-                            }
-                        }
+                    Picker("Agent", selection: $preferences.cleanup.agent) {
+                        ForEach(CleanupOptions.Agent.allCases, id: \.self) { Text($0.name).tag($0) }
                     }
+                    .onChange(of: preferences.cleanup.agent) { testResult = nil }
+                    switch preferences.cleanup.agent {
+                    case .codex:
+                        Text("Uses your Codex sign-in and default model. Your MCP servers and plugins are turned off while formatting, which keeps each request small.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    case .pi:
+                        Text("Uses your Pi sign-in and default model. Pi can run tools without asking; Blah tells it not to.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    case .custom:
+                        TextField("Command", text: $preferences.cleanup.agentCommand, prompt: Text("npx -y my-acp-adapter"))
+                            .fontDesign(.monospaced)
+                        Text("Any Agent Client Protocol adapter, run in your login shell.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    formattingTest
                 } header: { Text("Agent formatting") } footer: {
-                    Text("Runs an Agent Client Protocol adapter in a non-interactive login shell, using that agent's own sign-in and model settings. It starts when you begin recording and stays ready between dictations. Each dictation uses a new session in an empty folder, which Blah deletes afterwards. Blah tells the agent not to use tools and declines its permission requests, but some agents run tools without asking.")
+                    Text("The agent starts when you begin recording. Each dictation gets a new session, deleted afterwards.")
                 }
                 Section {
                     ForEach($agentVariables) { $variable in
@@ -211,7 +222,7 @@ struct SettingsView: View {
                     }
                     Button("Add variable", systemImage: "plus") { agentVariables.append(AgentVariable()) }
                 } header: { Text("Environment variables") } footer: {
-                    Text("Passed to the agent, for example the API key its provider reads. Values are stored in your Keychain. Changes apply to the next dictation.")
+                    Text("For keys the agent needs, such as a proxy API key. Stored in your Keychain.")
                 }
                 .onChange(of: agentVariables) { AgentVariable.save(agentVariables) }
             }
@@ -299,6 +310,25 @@ struct SettingsView: View {
                 Text("Appears on the display containing your pointer.").font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
+    }
+
+    private var formattingTest: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Button(testing ? "Testing…" : "Test") {
+                testing = true
+                testResult = nil
+                Task {
+                    testResult = await controller.testFormatting()
+                    testing = false
+                }
+            }
+            .disabled(testing)
+            if let testResult {
+                Label(testResult.message, systemImage: testResult.passed ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                    .foregroundStyle(testResult.passed ? .green : .red)
+                    .font(.callout).textSelection(.enabled)
+            }
+        }
     }
 
     @ViewBuilder

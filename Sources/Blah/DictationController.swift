@@ -234,6 +234,25 @@ final class DictationController {
         if !cleanup.enabled || !cleanup.isAgent { Task { await agent.stop() } }
     }
 
+    /// Formats a sample with the selected online or agent formatter, so a missing key or
+    /// broken command shows up in Settings instead of during a dictation.
+    func testFormatting() async -> (passed: Bool, message: String) {
+        let options = preferences.cleanup
+        let agent = agent
+        let start = ContinuousClock.now
+        do {
+            let text = try await RemoteFormatting.run(Cancellation(), seconds: 90, failure: options.isOnline ? "Online formatting" : "The agent") {
+                let sample = "um so I think we should uh meet on tuesday no wait wednesday"
+                return options.isOnline ? try await OnlineFormatter.clean(sample, options: options)
+                    : try await agent.clean(sample, options: options)
+            }
+            let seconds = (ContinuousClock.now - start).formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1)))
+            return (true, "Worked in \(seconds): \(text)")
+        } catch {
+            return (false, error.localizedDescription.replacingOccurrences(of: " Used the original transcript.", with: ""))
+        }
+    }
+
     func selectSpeechModel(_ filename: String) {
         guard !isBusy, !modelLoading, mode == .none else { return }
         preferences.speechModel = filename
@@ -346,7 +365,7 @@ final class DictationController {
         let speechModel = preferences.speechModel
         Task { [inference] in await inference.warm(directory: directory, speechModel: speechModel, cleanup: cleanup) }
         if cleanup.enabled && cleanup.isAgent {
-            Task { [agent] in try? await agent.prepare(command: cleanup.agentCommand) }
+            Task { [agent] in try? await agent.prepare(cleanup) }
         }
         pressedAt = time
         mode = .held

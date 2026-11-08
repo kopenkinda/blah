@@ -142,10 +142,46 @@ actor AgentFormatter {
     private var idleStop: Task<Void, Never>?
     private var idleTimeout: Duration? = .seconds(15 * 60)
 
+    /// What runs for each agent choice. Variables from Settings override Blah's defaults.
+    static func launch(_ options: CleanupOptions) -> (command: String, environment: [String: String]) {
+        var environment: [String: String] = [:]
+        let command: String
+        switch options.agent {
+        case .codex:
+            // The npx copy of Codex lacks its native binary, so point the adapter at the installed one.
+            command = "CODEX_PATH=$(whence -p codex) npx -y @agentclientprotocol/codex-acp"
+            environment["CODEX_CONFIG"] = codexOverrides()
+        case .pi: command = "npx -y pi-acp"
+        case .custom: command = options.agentCommand
+        }
+        for variable in AgentVariable.load() where !variable.name.isEmpty { environment[variable.name] = variable.value }
+        return (command, environment.compactMapValues { $0 })
+    }
+
+    /// Turns off the person's MCP servers and plugins for formatting. Their tool schemas
+    /// otherwise make each request two to five times larger.
+    private static func codexOverrides() -> String? {
+        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].map(URL.init(fileURLWithPath:))
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+        guard let config = try? String(contentsOf: home.appendingPathComponent("config.toml"), encoding: .utf8) else { return nil }
+        var overrides: [String: [String: [String: Bool]]] = [:]
+        for section in ["mcp_servers", "plugins"] {
+            // Table headers such as [mcp_servers.docs] or [plugins."chrome@openai"], not their subtables.
+            let pattern = "(?m)^\\[\(section)\\.(\"[^\"]+\"|[A-Za-z0-9_-]+)\\]\\s*$"
+            for match in config.matches(of: try! Regex(pattern)) {
+                let name = String(match.output[1].substring ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                overrides[section, default: [:]][name] = ["enabled": false]
+            }
+        }
+        guard !overrides.isEmpty, let data = try? JSONEncoder().encode(overrides) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     /// Starting an adapter and a session takes seconds, so the controller calls this when recording begins.
-    func prepare(command: String) async throws {
+    func prepare(_ options: CleanupOptions) async throws {
         idleStop?.cancel()
-        let environment = Dictionary(AgentVariable.load().filter { !$0.name.isEmpty }.map { ($0.name, $0.value) }) { $1 }
+        let (command, environment) = Self.launch(options)
+        guard !command.isEmpty else { throw AppFailure("Enter a command for the custom agent in Settings. Used the original transcript.") }
         if self.command != command || self.environment != environment || process?.isRunning != true {
             start(command, environment: environment)
         }
@@ -156,7 +192,7 @@ actor AgentFormatter {
 
     func clean(_ transcript: String, options: CleanupOptions) async throws -> String {
         defer { scheduleStop() }
-        try await prepare(command: options.agentCommand)
+        try await prepare(options)
         guard let session = spare else { throw AppFailure("The agent is not running. Used the original transcript.") }
         spare = nil
         let id = try await session.value
