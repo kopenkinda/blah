@@ -411,7 +411,7 @@ struct SettingsView: View {
             }
             Section("Formatting") {
                 if !matchingModels.contains(where: \.isFormatting) {
-                    Text("No formatting models for this language. Use transcription with formatting off.").foregroundStyle(.secondary)
+                    Text("No local formatting models for this language. Choose online or agent formatting in General.").foregroundStyle(.secondary)
                 }
                 ForEach(matchingModels.filter(\.isFormatting)) { model in modelRow(model) }
             }

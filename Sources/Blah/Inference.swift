@@ -85,7 +85,7 @@ actor Inference {
             recognizer.processString(transcript)
             if let language = recognizer.dominantLanguage, language != .english,
                recognizer.languageHypotheses(withMaximum: 1)[language, default: 0] >= 0.8 {
-                throw AppFailure("S1-mini supports English formatting only. Used the original transcript. Choose a multilingual formatter in Settings.")
+                throw AppFailure("S1-mini supports English formatting only. Used the original transcript. Choose online or agent formatting in Settings for other languages.")
             }
         }
         try startCleanup(model, directory: directory)
@@ -96,7 +96,7 @@ actor Inference {
         defer { cancellation.onCancel(nil) }
         // Termination closes stdout, releasing the blocking read on this actor.
         let deadline = DispatchWorkItem { if helper.isRunning { helper.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + (options.model == ModelFiles.cleanup ? 30 : 60), execute: deadline)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
         defer { deadline.cancel() }
         do {
             struct Request: Encodable {
@@ -160,7 +160,7 @@ actor Inference {
         let process = Process()
         process.executableURL = Bundle.main.executableURL?.deletingLastPathComponent()
             .appendingPathComponent("BlahCleanup")
-        process.arguments = [modelPath, model.filename == ModelFiles.cleanup ? "s1" : "qwen3"]
+        process.arguments = [modelPath]
         let input = Pipe()
         let output = Pipe()
         process.standardInput = input

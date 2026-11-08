@@ -45,6 +45,8 @@ struct CleanupOptions: Codable, Sendable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try values.decode(Bool.self, forKey: .enabled)
         model = try values.decodeIfPresent(String.self, forKey: .model) ?? ModelFiles.cleanup
+        // Qwen3 4B was removed. S1-mini is the remaining local formatter.
+        if model == "Qwen3-4B-Q4_K_M.gguf" { model = ModelFiles.cleanup }
         styling = try values.decode(String.self, forKey: .styling)
         structure = try values.decode(String.self, forKey: .structure)
         context = try values.decode(String.self, forKey: .context)

@@ -71,18 +71,6 @@ struct LocalModel: Identifiable, Sendable {
         "zh", "en", "yue", "ar", "de", "fr", "es", "pt", "id", "it", "ko", "ru", "th", "vi", "ja",
         "tr", "hi", "ms", "nl", "sv", "da", "fi", "pl", "cs", "fil", "fa", "el", "ro", "hu", "mk"
     ]
-    // Publisher's language coverage, with script variants grouped under their language.
-    // https://qwenlm.github.io/blog/qwen3/
-    private static let qwenTextLanguages = [
-        "en", "fr", "pt", "de", "ro", "sv", "da", "bg", "ru", "cs", "el", "uk", "es", "nl", "sk", "hr",
-        "pl", "lt", "nb", "nn", "fa", "sl", "gu", "lv", "it", "oc", "ne", "mr", "be", "sr", "lb", "vec",
-        "as", "cy", "szl", "ast", "hne", "awa", "mai", "bho", "sd", "ga", "fo", "hi", "pa", "bn", "or",
-        "tg", "yi", "lmo", "lij", "scn", "fur", "sc", "gl", "ca", "is", "sq", "li", "prs", "af", "mk",
-        "si", "ur", "mag", "bs", "hy", "zh", "yue", "my", "ar", "ars", "apc", "arz", "ary", "acm",
-        "acq", "aeb", "he", "mt", "id", "ms", "tl", "ceb", "jv", "su", "min", "ban", "bjn", "pag",
-        "ilo", "war", "ta", "te", "kn", "ml", "tr", "az", "uz", "kk", "ba", "tt", "th", "lo", "fi",
-        "et", "hu", "vi", "km", "ja", "ko", "ka", "eu", "ht", "pap", "kea", "tpi", "sw"
-    ]
 
     static let catalog: [Self] = [
         .init(name: "Parakeet Unified English", detail: "English · Q8",
@@ -111,12 +99,7 @@ struct LocalModel: Identifiable, Sendable {
               filename: ModelFiles.cleanup, repository: "superwhisper/s1-mini-GGUF",
               revision: "ee2c0f56e56345f475749a44ff2893e21c3cb292", bytes: 484_219_808,
               sha256: "3b41ebe2502cbd03e811d5d16b022f5ab551eda58d62597d152f89535003c634",
-              languages: ["en"], isFormatting: true),
-        .init(name: "Qwen3 4B", detail: "Experimental formatting · May rephrase text · Q4_K_M",
-              filename: "Qwen3-4B-Q4_K_M.gguf", repository: "Qwen/Qwen3-4B-GGUF",
-              revision: "a9a60d009fa7ff9606305047c2bf77ac25dbec49", bytes: 2_497_280_256,
-              sha256: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
-              languages: qwenTextLanguages, isFormatting: true)
+              languages: ["en"], isFormatting: true)
     ]
     static func name(for filename: String) -> String {
         catalog.first { $0.filename == filename }?.name ?? filename

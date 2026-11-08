@@ -8,7 +8,7 @@ enum RemoteFormatting {
         options.prompt ?? defaultInstructions(options)
     }
 
-    /// The local Qwen3 instructions, seeded from the style pickers the person last used.
+    /// Default instructions, seeded from the style pickers the person last used.
     static func defaultInstructions(_ options: CleanupOptions) -> String {
         """
         Edit a speech transcript. Return only the edited transcript, with no explanation, preamble, or quotation marks.
