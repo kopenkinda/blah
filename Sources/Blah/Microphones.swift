@@ -48,6 +48,15 @@ enum Microphones {
         }
     }
 
+    /// Calls `handler` when devices are added or removed, or the default input changes.
+    static func observeChanges(_ handler: @escaping @Sendable () -> Void) {
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        for selector in [kAudioHardwarePropertyDevices, kAudioHardwarePropertyDefaultInputDevice] {
+            var address = address(selector)
+            AudioObjectAddPropertyListenerBlock(system, &address, .main) { _, _ in handler() }
+        }
+    }
+
     private static func address(_ selector: AudioObjectPropertySelector,
                                 scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)

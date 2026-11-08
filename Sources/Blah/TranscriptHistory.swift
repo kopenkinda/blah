@@ -29,11 +29,14 @@ enum TranscriptHistory {
         }
     }
 
-    static func append(_ entry: Entry) throws {
+    /// Returns the history as written, so callers need not read the file again.
+    @discardableResult static func append(_ entry: Entry) throws -> [Entry] {
         // Read the current file, never a cached list that could restore deleted entries.
         let entries = try load()
         if entries.count >= limit {
-            try replace(with: Array(entries.suffix(limit - 1)) + [entry])
+            let updated = Array(entries.suffix(limit - 1)) + [entry]
+            try replace(with: updated)
+            return updated
         } else {
             let file = try openFile(at: url, flags: O_RDWR | O_APPEND)
             defer { try? file.close() }
@@ -46,6 +49,7 @@ enum TranscriptHistory {
             data.append(try encode(entry))
             try file.write(contentsOf: data)
             try file.synchronize()
+            return entries + [entry]
         }
     }
 

@@ -60,6 +60,9 @@ final class Preferences {
     var stopSound: RecordingSound { didSet { save() } }
     var startSoundVolume: Double { didSet { save() } }
     var stopSoundVolume: Double { didSet { save() } }
+    /// Minutes of inactivity before models are freed; 0 keeps them loaded.
+    var unloadAfterMinutes: Int { didSet { save() } }
+    static let unloadChoices = [5, 15, 30, 60, 120, 0]
 
     private struct Saved: Codable {
         var microphonePriority: [Microphone]?
@@ -75,6 +78,7 @@ final class Preferences {
         var stopSound: RecordingSound?
         var startSoundVolume: Double?
         var stopSoundVolume: Double?
+        var unloadAfterMinutes: Int?
     }
 
     init() {
@@ -101,6 +105,7 @@ final class Preferences {
             stopSound = saved.stopSound ?? legacySounds.1
             startSoundVolume = min(1, max(0, saved.startSoundVolume ?? 0.3))
             stopSoundVolume = min(1, max(0, saved.stopSoundVolume ?? 0.3))
+            unloadAfterMinutes = saved.unloadAfterMinutes.flatMap { Self.unloadChoices.contains($0) ? $0 : nil } ?? 15
         } else {
             microphonePriority = []
             speechModel = ModelFiles.speech
@@ -113,13 +118,14 @@ final class Preferences {
             stopSound = .off
             startSoundVolume = 0.3
             stopSoundVolume = 0.3
+            unloadAfterMinutes = 15
             modelDirectory = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/voice-control/models").path
         }
     }
 
     private func save() {
-        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, replacements: replacements, modelDirectory: modelDirectory, speechModel: speechModel, speechLanguage: speechLanguage, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume)
+        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, replacements: replacements, modelDirectory: modelDirectory, speechModel: speechModel, speechLanguage: speechLanguage, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume, unloadAfterMinutes: unloadAfterMinutes)
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: "preferences")
         }

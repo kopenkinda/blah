@@ -103,6 +103,11 @@ final class DictationController {
             discardCapture()
             notice = "Keyboard monitoring was interrupted. Try again."
         }
+        refreshMicrophones()
+        // Device changes are pushed by Core Audio; only permissions need polling.
+        Microphones.observeChanges { [weak self] in
+            Task { @MainActor in self?.refreshMicrophones() }
+        }
         refreshPermissions()
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshPermissions() }
@@ -116,8 +121,10 @@ final class DictationController {
         modelLoading = true
         let directory = preferences.modelDirectory
         let speechModel = preferences.speechModel
+        let timeout = idleTimeout
         Task {
             do {
+                await inference.setIdleTimeout(timeout)
                 try await inference.prepare(directory: directory, filename: speechModel)
                 modelReady = true
             } catch { notice = error.localizedDescription }
@@ -151,7 +158,6 @@ final class DictationController {
     }
 
     func refreshPermissions() {
-        refreshMicrophones()
         microphoneAllowed = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         accessibilityAllowed = AXIsProcessTrusted()
         inputAllowed = CGPreflightListenEventAccess()
@@ -203,6 +209,16 @@ final class DictationController {
         keys.key = preferences.key
         recordingKey = false
         refreshPermissions()
+    }
+
+    private var idleTimeout: Duration? {
+        preferences.unloadAfterMinutes > 0 ? .seconds(preferences.unloadAfterMinutes * 60) : nil
+    }
+
+    func setUnloadAfter(minutes: Int) {
+        preferences.unloadAfterMinutes = minutes
+        let timeout = idleTimeout
+        Task { await inference.setIdleTimeout(timeout) }
     }
 
     func cleanupChanged() {
@@ -518,9 +534,9 @@ final class DictationController {
                         formattingModel: job.cleanup.enabled ? job.cleanup.model : nil,
                         duration: Double(job.samples.count) / 16_000, formattingStatus: formattingStatus)
                     do {
-                        try TranscriptHistory.append(entry)
+                        history = try TranscriptHistory.append(entry)
+                        historyError = nil
                         unsavedTranscript = nil
-                        reloadHistory()
                     } catch {
                         unsavedTranscript = entry
                         let message = "Could not save this transcript to history. You can still copy it from Transcript History. \(error.localizedDescription)"

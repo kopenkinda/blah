@@ -13,8 +13,9 @@ struct BlahApp {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let controller = DictationController()
+    private let library = ModelLibrary()
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var pasteTarget: pid_t?
@@ -86,7 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.isReleasedWhenClosed = false
             // Let the hosting controller coordinate the split view's toolbar,
             // safe area, and sidebar actions with the window.
-            window.contentViewController = NSHostingController(rootView: SettingsView(controller: controller))
+            window.contentViewController = NSHostingController(rootView: SettingsView(controller: controller, library: library))
+            window.delegate = self
             window.center()
             window.setFrameAutosaveName("BlahSettingsSidebar")
             settingsWindow = window
@@ -94,6 +96,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.reloadHistory()
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    // Rebuilt on next open, so the view hierarchy does not stay in memory while Blah sits in the menu bar.
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
+        window.delegate = nil
+        settingsWindow = nil
     }
 
     private func installApplicationMenu() {

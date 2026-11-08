@@ -8,6 +8,8 @@ actor Inference {
     private var helperInput: FileHandle?
     private var helperOutput: FileHandle?
     private var helperPath: String?
+    private var idleUnload: Task<Void, Never>?
+    private var idleTimeout: Duration? = .seconds(15 * 60)
 
     init() {
         signal(SIGPIPE, SIG_IGN)
@@ -29,10 +31,12 @@ actor Inference {
         if let session { transcribe_session_free(session) }
         session = replacement
         loadedPath = path
+        scheduleUnload()
     }
 
     func transcribe(_ samples: [Float], directory: String, filename: String, language: String = "auto", cancellation: Cancellation) throws -> String {
         try cancellation.check()
+        defer { scheduleUnload() }
         try prepare(directory: directory, filename: filename)
         guard let session else { throw AppFailure("The speech model is not ready.") }
         try cancellation.check()
@@ -69,6 +73,7 @@ actor Inference {
     func clean(_ transcript: String, options: CleanupOptions, directory: String,
                cancellation: Cancellation) throws -> String {
         try cancellation.check()
+        defer { scheduleUnload() }
         guard let model = LocalModel.catalog.first(where: { $0.filename == options.model && $0.isFormatting }) else {
             throw AppFailure("The selected formatting model is unavailable. Used the original transcript.")
         }
@@ -122,14 +127,18 @@ actor Inference {
             var data = try JSONEncoder().encode(request)
             data.append(10)
             try helperInput.write(contentsOf: data)
+            // The helper writes exactly one line per request, so nothing follows the newline.
             var response = Data()
-            while response.count < 128_000 {
-                guard let byte = try helperOutput.read(upToCount: 1), !byte.isEmpty else {
+            var chunk = [UInt8](repeating: 0, count: 4_096)
+            while response.last != 10 {
+                let count = chunk.withUnsafeMutableBytes { Darwin.read(helperOutput.fileDescriptor, $0.baseAddress, $0.count) }
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0, response.count < 128_000 else {
                     throw AppFailure("\(model.name) stopped or took too long. Used the original transcript.")
                 }
-                if byte[0] == 10 { break }
-                response.append(byte)
+                response.append(contentsOf: chunk[..<count])
             }
+            response.removeLast()
             try cancellation.check()
             struct Response: Decodable { var text: String?; var error: String? }
             let result = try JSONDecoder().decode(Response.self, from: response)
@@ -151,6 +160,33 @@ actor Inference {
         helperInput = nil
         helperOutput = nil
         helperPath = nil
+    }
+
+    /// Nil keeps models loaded indefinitely.
+    func setIdleTimeout(_ timeout: Duration?) {
+        guard timeout != idleTimeout else { return }
+        idleTimeout = timeout
+        scheduleUnload()
+    }
+
+    // Models stay resident between dictations; after a quiet period they are freed and reloaded on next use.
+    private func scheduleUnload() {
+        idleUnload?.cancel()
+        idleUnload = nil
+        guard let idleTimeout, session != nil || helper != nil else { return }
+        idleUnload = Task {
+            try? await Task.sleep(for: idleTimeout)
+            unloadIfIdle()
+        }
+    }
+
+    private func unloadIfIdle() {
+        guard !Task.isCancelled else { return }
+        idleUnload = nil
+        stopCleanup()
+        if let session { transcribe_session_free(session) }
+        session = nil
+        loadedPath = nil
     }
 
     private func failure(_ status: transcribe_status) -> AppFailure {

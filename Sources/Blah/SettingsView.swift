@@ -4,7 +4,8 @@ import ServiceManagement
 struct SettingsView: View {
     @Bindable var controller: DictationController
     @State private var page: Page? = .general
-    @State private var library = ModelLibrary()
+    // Owned outside the view so a download survives the window closing.
+    var library: ModelLibrary
     @State private var loginStatus = SMAppService.mainApp.status
     @State private var loginError: String?
     @State private var browseLanguage = "all"
@@ -56,6 +57,7 @@ struct SettingsView: View {
 
     private func refresh() {
         loginStatus = SMAppService.mainApp.status
+        controller.refreshMicrophones()
         controller.reloadHistory()
         library.refresh(directory: controller.preferences.modelDirectory)
     }
@@ -133,7 +135,7 @@ struct SettingsView: View {
             } header: { Text("Microphone priority") } footer: {
                 Text("Uses the first available microphone. Changes apply to the next recording.")
             }
-            Section("Models") {
+            Section {
                 Picker("Transcription", selection: Binding(
                     get: { preferences.speechModel },
                     set: { controller.selectSpeechModel($0) }
@@ -152,7 +154,20 @@ struct SettingsView: View {
                 if !controller.modelReady && !controller.modelLoading {
                     Button("Retry selected model") { controller.prepareModel() }.disabled(controller.isBusy)
                 }
+                Picker("Unload when idle", selection: Binding(
+                    get: { preferences.unloadAfterMinutes },
+                    set: { controller.setUnloadAfter(minutes: $0) }
+                )) {
+                    ForEach(Preferences.unloadChoices, id: \.self) { minutes in
+                        Text(minutes == 0 ? "Never" : minutes < 60 ? "After \(minutes) minutes"
+                             : minutes == 60 ? "After 1 hour" : "After \(minutes / 60) hours").tag(minutes)
+                    }
+                }
                 Button("Manage models…") { page = .models }
+            } header: { Text("Models") } footer: {
+                Text(preferences.unloadAfterMinutes == 0
+                     ? "Models stay in memory while Blah is running."
+                     : "Frees model memory after a period without dictation. The next dictation takes longer while models load.")
             }
             if preferences.cleanup.enabled {
                 Section("Formatting") {
