@@ -126,7 +126,7 @@ private struct NotchIndicator: View {
                     .contentTransition(.opacity)
                     .animation(.easeInOut(duration: 0.2), value: controller.indicatorWord)
             }
-            if let notice = controller.overlayNotice {
+            if let notice = controller.overlayNotice, notice != DictationController.noSpeech {
                 Text(notice)
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.85))
@@ -187,7 +187,7 @@ extension DictationController {
 
     /// One word for the notch.
     fileprivate var indicatorWord: String {
-        if overlayNotice != nil { return "Problem" }
+        if let overlayNotice { return overlayNotice == Self.noSpeech ? "Nothing detected" : "Problem" }
         if indicatorRecording { return transcribingLive ? "Live" : mode == .locked ? "Hands-free" : "Listening" }
         return stage ?? "Transcribing"
     }

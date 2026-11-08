@@ -77,6 +77,8 @@ final class DictationController {
         var cancellation: Cancellation
     }
 
+    static let noSpeech = "No speech was detected."
+
     var canDictate: Bool {
         microphoneAllowed && accessibilityAllowed && inputAllowed && keyMonitorRunning && modelReady && !pastingLastTranscript && !recordingKey
     }
@@ -520,7 +522,7 @@ final class DictationController {
                 }
                 // Models invent phrases such as "Thank you" on silence, so near-silent clips skip transcription.
                 guard AudioRecorder.loudestWindow(samples) >= 0.003_16 else {
-                    notice = "No speech was detected."
+                    notice = Self.noSpeech
                     return
                 }
                 jobs.append(Job(samples: samples, cleanup: cleanup, replacements: replacements, directory: directory, speechModel: speechModel, speechLanguage: speechLanguage, target: destination,
@@ -574,7 +576,7 @@ final class DictationController {
                 do {
                     let raw = try await inference.transcribe(job.samples, directory: job.directory, filename: job.speechModel, language: job.speechLanguage, cancellation: job.cancellation)
                     try job.cancellation.check()
-                    guard !raw.isEmpty else { throw AppFailure("No speech was detected.") }
+                    guard !raw.isEmpty else { throw AppFailure(Self.noSpeech) }
                     var text = raw
                     var formattingStatus = "Off"
                     if job.cleanup.enabled {
@@ -640,7 +642,7 @@ final class DictationController {
         if captureVisible || stage != nil || processing { overlay?.show() }
         else if notice != nil {
             overlay?.show()
-            let duration: Duration = notice == "No speech was detected." ? .seconds(3) : .seconds(8)
+            let duration: Duration = notice == Self.noSpeech ? .seconds(3) : .seconds(8)
             noticeTimer = Task {
                 try? await Task.sleep(for: duration)
                 guard !Task.isCancelled, !captureVisible, stage == nil, !processing else { return }
