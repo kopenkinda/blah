@@ -30,6 +30,9 @@ final class AudioRecorder: NSObject, @unchecked Sendable {
     // Retained for the current capture so both failure paths can notify the
     // controller exactly once; cleared when the capture is torn down.
     private var onInterruption: (@Sendable (String) -> Void)?
+    // Live audio for streaming transcription, in blocks of at least 160 ms to keep per-feed overhead low.
+    private var blocks: AsyncStream<[Float]>.Continuation?
+    private var pendingBlock: [Float] = []
 
     // Session lifecycle, owned by `queue`.
     private var session: AVCaptureSession?
@@ -37,7 +40,8 @@ final class AudioRecorder: NSObject, @unchecked Sendable {
 
     var level: Float { lock.withLock { peak } }
 
-    func start(deviceUID: String, onInterruption: @escaping @Sendable (String) -> Void) async throws {
+    func start(deviceUID: String, blocks: AsyncStream<[Float]>.Continuation? = nil,
+               onInterruption: @escaping @Sendable (String) -> Void) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
                 do {
@@ -84,6 +88,8 @@ final class AudioRecorder: NSObject, @unchecked Sendable {
                         drain = nil
                         failure = nil
                         activeOutput = output
+                        self.blocks = blocks
+                        pendingBlock = []
                         return self.generation
                     }
                     // Observe only this session and the selected device, so unrelated
@@ -223,6 +229,9 @@ final class AudioRecorder: NSObject, @unchecked Sendable {
             output = activeOutput
             activeOutput = nil
             syncClock = nil
+            blocks?.finish()
+            blocks = nil
+            pendingBlock = []
         }
         guard active else { return }
         let session = self.session
@@ -266,8 +275,8 @@ extension AudioRecorder: AVCaptureAudioDataOutputSampleBufferDelegate {
             failCapture("Microphone audio could not be read. Try recording again.", from: output)
             return
         }
-        lock.withLock {
-            guard accepting, output === activeOutput else { return }
+        let ready: (block: [Float], sink: AsyncStream<[Float]>.Continuation)? = lock.withLock {
+            guard accepting, output === activeOutput else { return nil }
             if let hostSeconds = Self.hostSeconds(of: sampleBuffer, clock: syncClock) {
                 timeline.sync(to: hostSeconds, bufferedSamples: samples.count)
             } else {
@@ -285,7 +294,13 @@ extension AudioRecorder: AVCaptureAudioDataOutputSampleBufferDelegate {
                 drain?.signal()
                 drain = nil
             }
+            guard let blocks else { return nil }
+            pendingBlock.append(contentsOf: kept)
+            guard pendingBlock.count >= 2_560 else { return nil }
+            defer { pendingBlock = [] }
+            return (pendingBlock, blocks)
         }
+        if let ready { ready.sink.yield(ready.block) }
     }
 
     /// RMS of the loudest 30 ms window. 0.00316 is -50 dBFS, well below a whisper (Hex's threshold).

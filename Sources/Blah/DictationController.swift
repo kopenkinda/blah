@@ -365,7 +365,19 @@ final class DictationController {
                 guard let microphone = preferredMicrophone else {
                     throw AppFailure(microphoneError ?? "No microphone is available. Connect a microphone and try again.")
                 }
-                try await recorder.start(deviceUID: microphone.microphone.id) { [weak self] message in
+                // Stream into the model while the person speaks, so release only finalizes.
+                // The model serves one stream or run at a time, so queued work disables it.
+                var blocks: AsyncStream<[Float]>.Continuation?
+                if !processing && jobs.isEmpty {
+                    let (stream, sink) = AsyncStream<[Float]>.makeStream()
+                    blocks = sink
+                    Task { [inference] in
+                        for await block in stream {
+                            await inference.feed(block, directory: directory, filename: speechModel, owner: cancellation)
+                        }
+                    }
+                }
+                try await recorder.start(deviceUID: microphone.microphone.id, blocks: blocks) { [weak self] message in
                     Task { @MainActor in
                         guard let self, self.captureCancellation === cancellation, self.mode != .none else { return }
                         self.discardCapture()

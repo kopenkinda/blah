@@ -37,6 +37,8 @@ In Settings → Models, filter by the language you speak, download a model, then
 | Qwen3-ASR 0.6B | Transcription | 30, including English, French, and Russian | 850 MB |
 | S1-mini by Superwhisper | Formatting | English only | 484 MB |
 
+Parakeet Unified English transcribes while you speak, so a two-minute dictation pastes about as fast as a short one. Other models transcribe after you release the key.
+
 Whisper and Qwen3-ASR let you choose the spoken language or detect it automatically. Parakeet v3 recognizes its supported languages automatically. For English spoken with a French or Russian accent, choose English. Language coverage does not guarantee accuracy for a particular accent; compare models on recordings from the people using them.
 
 S1-mini is specialized for English; Blah skips it when text language detection confidently identifies another language. For other languages, use online or agent formatting. Select Off to keep the transcript without model formatting. Failed formatting keeps the original transcript.

@@ -12,6 +12,25 @@ actor Inference {
     private var idleTimeout: Duration? = .seconds(15 * 60)
     private var lastRun: ContinuousClock.Instant?
 
+    /// A live stream for the capture in progress, fed while the person speaks so key
+    /// release only finalizes it. Only Parakeet Unified English supports streaming.
+    /// While a stream is active no whole-clip run may use the model.
+    private struct Stream {
+        let owner: Cancellation
+        let abort = Cancellation()
+        var cap = PauseCap()
+        var fed = 0
+        var failed = false
+    }
+    private var stream: Stream?
+    private var lastStreamOwner: Cancellation?
+    private var streamWarmed = false
+    /// 400 ms of silence after the clip lets a streamed sentence keep its closing punctuation (Hex).
+    private static let trailingSilence = 6_400
+    /// Below about 15 s a whole-clip run beats finalizing a stream on Apple silicon
+    /// (65 ms against 110 ms at 7 s; 150 ms against 67 ms at 22 s).
+    private static let shortestStreamedClip = 15 * 16_000
+
     init() {
         signal(SIGPIPE, SIG_IGN)
         transcribe_log_set({ _, _, _ in }, nil)
@@ -20,6 +39,7 @@ actor Inference {
     func prepare(directory: String, filename: String) throws {
         let path = ModelFiles.url(filename, in: directory).path
         guard path != loadedPath else { return }
+        abandonStream()
         guard FileManager.default.fileExists(atPath: path) else {
             throw AppFailure("The selected speech model is missing. Download it or choose an installed model in Settings.")
         }
@@ -33,6 +53,7 @@ actor Inference {
         session = replacement
         loadedPath = path
         lastRun = nil
+        streamWarmed = false
         scheduleUnload()
     }
 
@@ -42,6 +63,9 @@ actor Inference {
         try prepare(directory: directory, filename: filename)
         guard let session else { throw AppFailure("The speech model is not ready.") }
         try cancellation.check()
+        if stream?.owner === cancellation, samples.count >= Self.shortestStreamedClip,
+           let text = finishStream(samples) { return text }
+        abandonStream()
         let context = Unmanaged.passUnretained(cancellation).toOpaque()
         transcribe_set_abort_callback(session, { context in
             guard let context else { return false }
@@ -144,9 +168,119 @@ actor Inference {
         }
         // Metal pages model weights out after a few idle minutes, and the first run also
         // builds compute graphs. A short silent run pays both costs ahead of time.
-        if let lastRun, ContinuousClock.now - lastRun < .seconds(60) { return }
-        _ = try? transcribe([Float](repeating: 0, count: 24_000), directory: directory, filename: speechModel,
-                            cancellation: Cancellation())
+        guard stream == nil else { return }
+        if lastRun == nil || ContinuousClock.now - lastRun! >= .seconds(60) {
+            _ = try? transcribe([Float](repeating: 0, count: 24_000), directory: directory, filename: speechModel,
+                                cancellation: Cancellation())
+        }
+        // 8 s reaches every stream window shape, so the first dictation does not compile them (Hex).
+        // The abort callback holds an unretained pointer, so the token must outlive the stream.
+        let abort = Cancellation()
+        if !streamWarmed, let session, supportsStreaming(session), begin(session, abort: abort) {
+            streamWarmed = true
+            _ = feedStream(session, [Float](repeating: 0, count: 128_000))
+            var update = transcribe_stream_update()
+            transcribe_stream_update_init(&update)
+            _ = transcribe_stream_finalize(session, &update)
+            transcribe_stream_reset(session)
+            transcribe_set_abort_callback(session, nil, nil)
+        }
+        withExtendedLifetime(abort) {}
+    }
+
+    /// Feeds one block of the capture owned by `owner`, starting its stream on the first block.
+    func feed(_ block: [Float], directory: String, filename: String, owner: Cancellation) {
+        // A new capture means the previous one is over; its job falls back to a whole-clip run.
+        if let current = stream, current.owner !== owner { abandonStream() }
+        if stream == nil {
+            guard lastStreamOwner !== owner, !owner.isCancelled, (try? prepare(directory: directory, filename: filename)) != nil,
+                  let session, supportsStreaming(session) else { return }
+            lastStreamOwner = owner
+            let created = Stream(owner: owner)
+            guard begin(session, abort: created.abort) else { return }
+            stream = created
+        }
+        guard let session, stream?.failed == false else { return }
+        if owner.isCancelled { abandonStream(); return }
+        stream!.fed += block.count
+        let audio = stream!.cap.push(block)
+        if !audio.isEmpty && !feedStream(session, audio) { stream!.failed = true }
+    }
+
+    /// Feeds what the stream has not heard and finalizes it. Nil means the stream is
+    /// unusable and the whole clip should be transcribed instead.
+    private func finishStream(_ clip: [Float]) -> String? {
+        defer { abandonStream() }
+        guard var current = stream, let session, !current.failed, current.fed <= clip.count + 4_000 else { return nil }
+        // A stuck finish aborts and falls back rather than delaying the paste.
+        let deadline = DispatchWorkItem { [abort = current.abort] in abort.cancel() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.5, execute: deadline)
+        defer { deadline.cancel() }
+        var audio = current.fed < clip.count ? current.cap.push(Array(clip[current.fed...])) : []
+        guard let rest = current.cap.finish() else { return nil }
+        audio += rest
+        audio += repeatElement(0, count: Self.trailingSilence)
+        var update = transcribe_stream_update()
+        transcribe_stream_update_init(&update)
+        guard feedStream(session, audio), transcribe_stream_finalize(session, &update) == TRANSCRIBE_OK else { return nil }
+        var result = transcribe_stream_text()
+        transcribe_stream_text_init(&result)
+        guard transcribe_stream_get_text(session, &result) == TRANSCRIBE_OK, let full = result.full_text else { return nil }
+        let text = String(cString: full).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        // Speech well past the last spoken word means the stream dropped a phrase.
+        let end = (0..<transcribe_n_words(session)).compactMap { index -> Int? in
+            var word = transcribe_word()
+            transcribe_word_init(&word)
+            guard transcribe_get_word(session, index, &word) == TRANSCRIBE_OK, let raw = word.text,
+                  String(cString: raw).contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
+            return Int(word.t1_ms)
+        }.max()
+        if let end, end > 0, current.cap.droppedSpeech(textEndMs: end) { return nil }
+        lastRun = .now
+        return text
+    }
+
+    private func begin(_ session: OpaquePointer, abort: Cancellation) -> Bool {
+        transcribe_set_abort_callback(session, { context in
+            guard let context else { return false }
+            return Unmanaged<Cancellation>.fromOpaque(context).takeUnretainedValue().isCancelled
+        }, Unmanaged.passUnretained(abort).toOpaque())
+        var run = transcribe_run_params()
+        transcribe_run_params_init(&run)
+        run.timestamps = TRANSCRIBE_TIMESTAMPS_WORD
+        var parameters = transcribe_stream_params()
+        transcribe_stream_params_init(&parameters)
+        guard transcribe_stream_begin(session, &run, &parameters) == TRANSCRIBE_OK else {
+            transcribe_stream_reset(session)
+            transcribe_set_abort_callback(session, nil, nil)
+            return false
+        }
+        return true
+    }
+
+    private func feedStream(_ session: OpaquePointer, _ audio: [Float]) -> Bool {
+        var update = transcribe_stream_update()
+        transcribe_stream_update_init(&update)
+        return audio.withUnsafeBufferPointer {
+            transcribe_stream_feed(session, $0.baseAddress, Int32($0.count), &update)
+        } == TRANSCRIBE_OK
+    }
+
+    private func abandonStream() {
+        guard stream != nil else { return }
+        if let session {
+            transcribe_stream_reset(session)
+            transcribe_set_abort_callback(session, nil, nil)
+        }
+        stream = nil
+    }
+
+    private func supportsStreaming(_ session: OpaquePointer) -> Bool {
+        var capabilities = transcribe_capabilities()
+        transcribe_capabilities_init(&capabilities)
+        return transcribe_model_get_capabilities(transcribe_get_model(session), &capabilities) == TRANSCRIBE_OK
+            && capabilities.supports_streaming
     }
 
     /// The helper loads its model on launch, so starting it early hides the load.
@@ -203,13 +337,14 @@ actor Inference {
     }
 
     private func unloadIfIdle() {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, stream == nil else { return }
         idleUnload = nil
         stopCleanup()
         if let session { transcribe_session_free(session) }
         session = nil
         loadedPath = nil
         lastRun = nil
+        streamWarmed = false
     }
 
     private func failure(_ status: transcribe_status) -> AppFailure {
