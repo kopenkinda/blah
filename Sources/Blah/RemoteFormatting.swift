@@ -57,9 +57,19 @@ enum OnlineFormatter {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let key = Keychain.read(Keychain.apiKey), !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
-        struct Body: Encodable { var model: String; var instructions: String; var input: String; var store = false }
+        struct Body: Encodable {
+            struct Reasoning: Encodable { var effort: String }
+            var model: String
+            var instructions: String
+            var input: String
+            var store = false
+            var reasoning: Reasoning?
+            var service_tier: String?
+        }
         request.httpBody = try JSONEncoder().encode(Body(model: options.onlineModel,
-            instructions: RemoteFormatting.instructions(options), input: transcript))
+            instructions: RemoteFormatting.instructions(options), input: transcript,
+            reasoning: options.onlineReasoning.map(Body.Reasoning.init),
+            service_tier: options.onlineFast ? "priority" : nil))
         let (data, response) = try await URLSession.shared.data(for: request)
         struct Reply: Decodable {
             struct Item: Decodable {
@@ -82,6 +92,62 @@ enum OnlineFormatter {
         return text
     }
 
+}
+
+/// A model an online endpoint offers, with what the provider reports about it.
+struct OnlineModel: Identifiable, Sendable, Hashable {
+    var id: String
+    var name: String
+    var reasoning: [String] = []
+    /// Describes the faster priority tier when the model has one, such as "1.5x speed".
+    var fast: String?
+}
+
+extension OnlineFormatter {
+    /// OpenAI-style endpoints list only model IDs. Codex subscription proxies also serve the
+    /// Codex catalog next to /v1, which adds names, reasoning levels, and the faster tier.
+    static func models(baseURL: String) async throws -> [OnlineModel] {
+        guard let base = URL(string: baseURL.trimmingCharacters(in: .whitespaces)) else { return [] }
+        struct Listing: Decodable {
+            struct Plain: Decodable { var id: String }
+            struct Detailed: Decodable {
+                struct Level: Decodable { var effort: String }
+                struct Tier: Decodable { var id: String; var description: String? }
+                var slug: String
+                var display_name: String?
+                var visibility: String?
+                var supported_reasoning_levels: [Level]?
+                var service_tiers: [Tier]?
+            }
+            var data: [Plain]?
+            var models: [Detailed]?
+        }
+        func fetch(_ url: URL) async throws -> Listing {
+            var request = URLRequest(url: url, timeoutInterval: 15)
+            if let key = Keychain.read(Keychain.apiKey), !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                throw AppFailure("The endpoint did not list its models (HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)).")
+            }
+            return try JSONDecoder().decode(Listing.self, from: data)
+        }
+        func detailed(_ listing: Listing) -> [OnlineModel] {
+            (listing.models ?? []).filter { $0.visibility != "hide" }.map { model in
+                OnlineModel(id: model.slug, name: model.display_name ?? model.slug,
+                            reasoning: model.supported_reasoning_levels?.map(\.effort) ?? [],
+                            fast: model.service_tiers?.first { $0.id == "priority" }.map { $0.description ?? "Faster" })
+            }
+        }
+        let listing = try await fetch(base.appendingPathComponent("models"))
+        if listing.models != nil { return detailed(listing) }
+        let ids = Set(listing.data?.map(\.id) ?? [])
+        if base.lastPathComponent == "v1",
+           let catalog = try? await fetch(base.deletingLastPathComponent().appendingPathComponent("backend-api/codex/models")) {
+            let models = detailed(catalog).filter { ids.contains($0.id) }
+            if !models.isEmpty { return models }
+        }
+        return ids.sorted().map { OnlineModel(id: $0, name: $0) }
+    }
 }
 
 /// Secrets live in the login Keychain so they never land in preferences or backups in plain text.
@@ -134,6 +200,9 @@ actor AgentFormatter {
     private var environment: [String: String] = [:]
     private var ready: Task<Void, Error>?
     private var spare: Task<String, Error>?
+    private var spareSettings: [String: String] = [:]
+    /// What the agent reported for its latest session, after Blah applied the person's choices.
+    private var settings: [AgentSetting] = []
     private var nextID = 0
     private var pending: [Int: CheckedContinuation<Data, Error>] = [:]
     private var replies: [String: String] = [:]
@@ -186,7 +255,16 @@ actor AgentFormatter {
             start(command, environment: environment)
         }
         try await ready?.value
-        if spare == nil { spare = Task { try await openSession() } }
+        // A session opened with older choices is replaced.
+        if spare != nil && spareSettings != options.agentSettings {
+            let stale = spare
+            spare = nil
+            Task { if let id = try? await stale?.value { _ = try? await request("session/delete", ["sessionId": id]) } }
+        }
+        if spare == nil {
+            spareSettings = options.agentSettings
+            spare = Task { [choices = options.agentSettings] in try await openSession(choices) }
+        }
         scheduleStop()
     }
 
@@ -226,20 +304,38 @@ actor AgentFormatter {
         return (replies[id] ?? "").replacingOccurrences(of: "</?transcript>", with: "", options: .regularExpression)
     }
 
-    private func openSession() async throws -> String {
+    /// The model, reasoning, and speed options the agent offers, as its latest session reported them.
+    func availableSettings(_ options: CleanupOptions) async throws -> [AgentSetting] {
+        try await prepare(options)
+        _ = try await spare?.value
+        return settings
+    }
+
+    private func openSession(_ choices: [String: String]) async throws -> String {
         let session = try object(await request("session/new", ["cwd": try Self.workspace().path, "mcpServers": []]))
         guard let id = session["sessionId"] as? String else { throw AppFailure("The agent did not start a session.") }
-        // The transcript must never run tools, and editing needs little thought. Both are best effort.
+        // The transcript must never run tools. Best effort: not every agent has this mode.
         if let modes = (session["modes"] as? [String: Any])?["availableModes"] as? [[String: Any]],
            modes.contains(where: { $0["id"] as? String == "read-only" }) {
             _ = try? await request("session/set_mode", ["sessionId": id, "modeId": "read-only"])
         }
-        for option in session["configOptions"] as? [[String: Any]] ?? [] where option["category"] as? String == "thought_level" {
-            let values = (option["options"] as? [[String: Any]] ?? []).compactMap { $0["value"] as? String }
-            if let lowest = ["off", "minimal", "low"].first(where: values.contains), let configID = option["id"] as? String {
-                _ = try? await request("session/set_config_option", ["sessionId": id, "configId": configID, "value": lowest])
+        var current = AgentSetting.parse(session["configOptions"])
+        // The model goes first because it decides which reasoning levels exist.
+        for category in ["model", "thought_level", "model_config"] {
+            for setting in current where setting.category == category {
+                // Formatting needs little thought, so reasoning defaults to the lowest level, also when
+                // a saved level does not exist for a newly chosen model.
+                let offered = setting.values.map(\.value)
+                let wanted = choices[setting.id].flatMap { offered.contains($0) ? $0 : nil }
+                    ?? (category == "thought_level" ? ["off", "none", "minimal", "low"].first(where: offered.contains) : nil)
+                guard let wanted, wanted != setting.current,
+                      let reply = try? object(await request("session/set_config_option",
+                                                            ["sessionId": id, "configId": setting.id, "value": wanted])) else { continue }
+                let updated = AgentSetting.parse(reply["configOptions"])
+                if !updated.isEmpty { current = updated }
             }
         }
+        settings = current
         return id
     }
 
@@ -398,5 +494,29 @@ actor AgentFormatter {
             .appendingPathComponent("Blah/Agent")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+}
+
+/// One option an ACP agent reports for a session, such as its model or reasoning level.
+struct AgentSetting: Identifiable, Sendable, Hashable {
+    struct Value: Sendable, Hashable { var value: String; var name: String }
+    var id: String
+    var name: String
+    var category: String
+    var current: String
+    var values: [Value]
+
+    /// Keeps the options that matter for formatting. Modes are left to Blah, which picks read-only.
+    static func parse(_ raw: Any?) -> [AgentSetting] {
+        (raw as? [[String: Any]] ?? []).compactMap { option in
+            guard let id = option["id"] as? String, let category = option["category"] as? String,
+                  ["model", "thought_level", "model_config"].contains(category),
+                  let current = option["currentValue"] as? String else { return nil }
+            let values = (option["options"] as? [[String: Any]] ?? []).compactMap { value -> Value? in
+                guard let raw = value["value"] as? String else { return nil }
+                return Value(value: raw, name: value["name"] as? String ?? raw)
+            }
+            return AgentSetting(id: id, name: option["name"] as? String ?? id, category: category, current: current, values: values)
+        }
     }
 }

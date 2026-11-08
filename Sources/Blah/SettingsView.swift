@@ -13,6 +13,10 @@ struct SettingsView: View {
     @State private var agentVariables = AgentVariable.load()
     @State private var testResult: (passed: Bool, message: String)?
     @State private var testing = false
+    @State private var onlineModels: [OnlineModel] = []
+    @State private var agentOptions: [AgentSetting] = []
+    @State private var providerLoading = false
+    @State private var providerError: String?
 
     private enum Page: String, CaseIterable, Identifiable {
         case general = "General", models = "Models", replacements = "Replacements", history = "Transcript History"
@@ -176,12 +180,19 @@ struct SettingsView: View {
             if preferences.cleanup.enabled && preferences.cleanup.isOnline {
                 Section {
                     TextField("Base URL", text: $preferences.cleanup.onlineURL, prompt: Text("https://api.openai.com/v1"))
-                    TextField("Model", text: $preferences.cleanup.onlineModel, prompt: Text("Model ID"))
                     SecureField("API key", text: $onlineKey, prompt: Text("Stored in your Keychain"))
                         .onChange(of: onlineKey) { Keychain.write(Keychain.apiKey, onlineKey) }
+                    onlineModelControls
+                    providerStatus
                     formattingTest
                 } header: { Text("Online formatting") } footer: {
-                    Text("Works with OpenAI and any server that supports its Responses API, including Codex subscription proxies. Pick a fast model; formatting needs little reasoning.")
+                    Text("Works with OpenAI and any server that supports its Responses API, including Codex subscription proxies. Models, reasoning levels, and Fast come from the server.")
+                }
+                .task(id: preferences.cleanup.onlineURL + onlineKey) {
+                    // Wait for typing to pause before asking the server.
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard !Task.isCancelled else { return }
+                    await loadProvider { onlineModels = try await OnlineFormatter.models(baseURL: preferences.cleanup.onlineURL) }
                 }
             }
             if preferences.cleanup.enabled && preferences.cleanup.isAgent {
@@ -189,7 +200,11 @@ struct SettingsView: View {
                     Picker("Agent", selection: $preferences.cleanup.agent) {
                         ForEach(CleanupOptions.Agent.allCases, id: \.self) { Text($0.name).tag($0) }
                     }
-                    .onChange(of: preferences.cleanup.agent) { testResult = nil }
+                    .onChange(of: preferences.cleanup.agent) {
+                        testResult = nil
+                        agentOptions = []
+                        preferences.cleanup.agentSettings = [:]
+                    }
                     switch preferences.cleanup.agent {
                     case .codex:
                         Text("Uses your Codex sign-in and default model. Your MCP servers and plugins are turned off while formatting, which keeps each request small.")
@@ -203,9 +218,23 @@ struct SettingsView: View {
                         Text("Any Agent Client Protocol adapter, run in your login shell.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
+                    ForEach(agentOptions) { setting in
+                        Picker(setting.name, selection: Binding(
+                            get: { preferences.cleanup.agentSettings[setting.id] ?? setting.current },
+                            set: { preferences.cleanup.agentSettings[setting.id] = $0 }
+                        )) {
+                            ForEach(setting.values, id: \.value) { Text($0.name).tag($0.value) }
+                        }
+                    }
+                    providerStatus
                     formattingTest
                 } header: { Text("Agent formatting") } footer: {
-                    Text("The agent starts when you begin recording. Each dictation gets a new session, deleted afterwards.")
+                    Text("The agent starts when you begin recording. Each dictation gets a new session, deleted afterwards. Model and reasoning options come from the agent; reasoning starts at its lowest level.")
+                }
+                .task(id: "\(preferences.cleanup.agent)\(preferences.cleanup.agentCommand)\(preferences.cleanup.agentSettings)\(agentVariables)") {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard !Task.isCancelled else { return }
+                    await loadProvider { agentOptions = try await controller.agentSettings() }
                 }
                 Section {
                     ForEach($agentVariables) { $variable in
@@ -310,6 +339,63 @@ struct SettingsView: View {
                 Text("Appears on the display containing your pointer.").font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
+    }
+
+    private func loadProvider(_ load: () async throws -> Void) async {
+        providerLoading = true
+        providerError = nil
+        do { try await load() } catch {
+            providerError = error.localizedDescription.replacingOccurrences(of: " Used the original transcript.", with: "")
+        }
+        providerLoading = false
+    }
+
+    @ViewBuilder
+    private var providerStatus: some View {
+        if providerLoading {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(controller.preferences.cleanup.isAgent ? "Asking \(controller.preferences.cleanup.agent.name) for its options…" : "Loading models…")
+                    .foregroundStyle(.secondary)
+            }
+        } else if let providerError {
+            Text(providerError).font(.callout).foregroundStyle(.red).textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private var onlineModelControls: some View {
+        @Bindable var preferences = controller.preferences
+        let model = onlineModels.first { $0.id == preferences.cleanup.onlineModel }
+        if onlineModels.isEmpty {
+            TextField("Model", text: $preferences.cleanup.onlineModel, prompt: Text("Model ID"))
+        } else {
+            Picker("Model", selection: $preferences.cleanup.onlineModel) {
+                ForEach(onlineModels) { Text($0.name).tag($0.id) }
+                if model == nil { Text(preferences.cleanup.onlineModel.isEmpty ? "Choose a model" : preferences.cleanup.onlineModel)
+                    .tag(preferences.cleanup.onlineModel) }
+            }
+            .onChange(of: preferences.cleanup.onlineModel) {
+                let chosen = onlineModels.first { $0.id == preferences.cleanup.onlineModel }
+                // Formatting needs little thought, so a new model starts at its lowest level.
+                if let levels = chosen?.reasoning, !levels.isEmpty, !levels.contains(preferences.cleanup.onlineReasoning ?? "") {
+                    preferences.cleanup.onlineReasoning = levels.first
+                }
+                if chosen?.fast == nil { preferences.cleanup.onlineFast = false }
+            }
+        }
+        // Servers that do not list reasoning levels get the standard ones, with the server's default first.
+        let levels = model?.reasoning.isEmpty == false ? model!.reasoning : ["minimal", "low", "medium", "high"]
+        Picker("Reasoning", selection: $preferences.cleanup.onlineReasoning) {
+            if model?.reasoning.isEmpty != false { Text("Server default").tag(String?.none) }
+            ForEach(levels, id: \.self) { Text($0.capitalized).tag(String?.some($0)) }
+        }
+        if let fast = model?.fast {
+            Toggle(isOn: $preferences.cleanup.onlineFast) {
+                Text("Fast")
+                Text(fast.prefix(1).uppercased() + fast.dropFirst() + ".")
+            }
+        }
     }
 
     private var formattingTest: some View {

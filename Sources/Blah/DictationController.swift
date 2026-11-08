@@ -257,6 +257,10 @@ final class DictationController {
         }
     }
 
+    func agentSettings() async throws -> [AgentSetting] {
+        try await agent.availableSettings(preferences.cleanup)
+    }
+
     func selectSpeechModel(_ filename: String) {
         guard !isBusy, !modelLoading, mode == .none else { return }
         preferences.speechModel = filename

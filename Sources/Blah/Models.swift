@@ -22,9 +22,15 @@ struct CleanupOptions: Codable, Sendable {
     var context = "general"
     var onlineURL = "https://api.openai.com/v1"
     var onlineModel = ""
+    /// Nil leaves reasoning to the server. Choosing a model in Settings preselects its lowest level.
+    var onlineReasoning: String?
+    /// OpenAI's priority processing: faster, and on some plans it uses more of the allowance.
+    var onlineFast = false
     var agent = Agent.codex
     /// The adapter command for a custom agent.
     var agentCommand = ""
+    /// Choices for the options the agent reports, by option ID, such as its model.
+    var agentSettings: [String: String] = [:]
     /// Instructions for online and agent formatting. Nil uses the default built from the style settings.
     var prompt: String?
 
@@ -42,7 +48,8 @@ struct CleanupOptions: Codable, Sendable {
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, model, styling, structure, context, onlineURL, onlineModel, agent, agentCommand, prompt
+        case enabled, model, styling, structure, context, onlineURL, onlineModel, onlineReasoning, onlineFast
+        case agent, agentCommand, agentSettings, prompt
     }
 
     init(from decoder: Decoder) throws {
@@ -61,6 +68,9 @@ struct CleanupOptions: Codable, Sendable {
         agent = try values.decodeIfPresent(Agent.self, forKey: .agent)
             ?? (agentCommand.contains("pi-acp") ? .pi : agentCommand.isEmpty || agentCommand.contains("codex-acp") ? .codex : .custom)
         prompt = try values.decodeIfPresent(String.self, forKey: .prompt)
+        onlineReasoning = try values.decodeIfPresent(String.self, forKey: .onlineReasoning)
+        onlineFast = try values.decodeIfPresent(Bool.self, forKey: .onlineFast) ?? false
+        agentSettings = try values.decodeIfPresent([String: String].self, forKey: .agentSettings) ?? [:]
     }
 }
 
