@@ -189,22 +189,25 @@ actor Inference {
     }
 
     /// Feeds one block of the capture owned by `owner`, starting its stream on the first block.
-    func feed(_ block: [Float], directory: String, filename: String, owner: Cancellation) {
+    /// Returns whether the capture is being transcribed live.
+    @discardableResult
+    func feed(_ block: [Float], directory: String, filename: String, owner: Cancellation) -> Bool {
         // A new capture means the previous one is over; its job falls back to a whole-clip run.
         if let current = stream, current.owner !== owner { abandonStream() }
         if stream == nil {
             guard lastStreamOwner !== owner, !owner.isCancelled, (try? prepare(directory: directory, filename: filename)) != nil,
-                  let session, supportsStreaming(session) else { return }
+                  let session, supportsStreaming(session) else { return false }
             lastStreamOwner = owner
             let created = Stream(owner: owner)
-            guard begin(session, abort: created.abort) else { return }
+            guard begin(session, abort: created.abort) else { return false }
             stream = created
         }
-        guard let session, stream?.failed == false else { return }
-        if owner.isCancelled { abandonStream(); return }
+        guard let session, stream?.failed == false else { return false }
+        if owner.isCancelled { abandonStream(); return false }
         stream!.fed += block.count
         let audio = stream!.cap.push(block)
         if !audio.isEmpty && !feedStream(session, audio) { stream!.failed = true }
+        return stream?.failed == false
     }
 
     /// Feeds what the stream has not heard and finalizes it. Nil means the stream is

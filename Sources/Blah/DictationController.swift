@@ -9,6 +9,8 @@ final class DictationController {
     let preferences = Preferences()
     var mode = CaptureMode.none
     var captureVisible = false
+    /// The recording is being transcribed while the person speaks.
+    var transcribingLive = false
     var availableMicrophones: [Microphones.Device] = []
     var microphoneError: String?
     var preferredMicrophone: Microphones.Device? {
@@ -80,7 +82,9 @@ final class DictationController {
     }
     var isBusy: Bool { captureStart != nil || processing || pastingLastTranscript }
     var status: String {
-        if captureVisible { return mode == .locked ? "Recording hands-free" : "Listening" }
+        if captureVisible {
+            return (mode == .locked ? "Recording hands-free" : "Listening") + (transcribingLive ? ", transcribing live" : "")
+        }
         if let stage { return stage }
         if pastingLastTranscript { return "Pasting" }
         if modelLoading { return "Loading Parakeet" }
@@ -390,9 +394,10 @@ final class DictationController {
                 if !processing && jobs.isEmpty {
                     let (stream, sink) = AsyncStream<[Float]>.makeStream()
                     blocks = sink
-                    Task { [inference] in
+                    Task { [inference, weak self] in
                         for await block in stream {
-                            await inference.feed(block, directory: directory, filename: speechModel, owner: cancellation)
+                            let live = await inference.feed(block, directory: directory, filename: speechModel, owner: cancellation)
+                            if let self, captureCancellation === cancellation, transcribingLive != live { transcribingLive = live }
                         }
                     }
                 }
@@ -476,6 +481,7 @@ final class DictationController {
         gestureTimer = nil
         mode = .none
         captureVisible = false
+        transcribingLive = false
         meterTimer?.invalidate()
         meterTimer = nil
         level = 0

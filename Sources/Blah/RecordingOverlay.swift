@@ -87,23 +87,60 @@ private struct RecordingIndicator: View {
     }
 }
 
+/// Particle colors for each dictation state, from one end of the tone range to the other.
+private struct Palette: Equatable {
+    var from: SIMD3<Double>
+    var to: SIMD3<Double>
+
+    static let listening = Self(from: [0.94, 0.67, 0.99], to: [0.51, 0.55, 0.97])
+    static let live = Self(from: [0.30, 0.92, 1.00], to: [0.38, 0.74, 1.00])
+    static let transcribing = Self(from: [0.35, 0.55, 1.00], to: [0.55, 0.72, 1.00])
+    static let formatting = Self(from: [1.00, 0.74, 0.22], to: [1.00, 0.88, 0.48])
+    static let pasting = Self(from: [0.35, 0.90, 0.55], to: [0.45, 0.95, 0.75])
+    static let notice = Self(from: [1.00, 0.36, 0.26], to: [1.00, 0.56, 0.32])
+
+    func mixed(with other: Self, _ amount: Double) -> Self {
+        Self(from: from + (other.from - from) * amount, to: to + (other.to - to) * amount)
+    }
+}
+
 private struct RecordingOrb: View {
     var controller: DictationController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var started = Date()
+    @State private var previous = Palette.listening
+    @State private var changedAt = Date.distantPast
 
     private var recording: Bool { controller.captureVisible || (controller.previewingOrb && controller.stage == nil) }
     private var showingNotice: Bool { controller.overlayNotice != nil }
+    private var palette: Palette {
+        if showingNotice { return .notice }
+        if recording { return controller.transcribingLive ? .live : .listening }
+        switch controller.stage {
+        case "Formatting": return .formatting
+        case "Pasting": return .pasting
+        default: return .transcribing
+        }
+    }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { timeline in
             let time = reduceMotion ? 1.7 : timeline.date.timeIntervalSince(started)
             let level = reduceMotion ? 0 : controller.previewingOrb
                 ? 0.2 + 0.15 * sin(time * 4) : Double(controller.level)
+            // Colors cross-fade between states. Going live also pulses once so the switch is noticed.
+            let progress = reduceMotion ? 1 : min(1, timeline.date.timeIntervalSince(changedAt) / 0.35)
+            let pulse = palette == .live && !reduceMotion
+                ? max(0, 1 - timeline.date.timeIntervalSince(changedAt) / 0.6) : 0
             ParticleSphere(time: time, level: level, processing: recording || showingNotice ? 0 : 1,
-                           notice: showingNotice, complete: controller.stage == "Pasting")
+                           palette: previous.mixed(with: palette, progress), pulse: pulse)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: level)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: recording)
+                .onChange(of: palette) { old, _ in
+                    let progress = min(1, Date().timeIntervalSince(changedAt) / 0.35)
+                    previous = previous.mixed(with: old, progress)
+                    changedAt = Date()
+                }
                 .overlay {
                     if showingNotice {
                         Image(systemName: "exclamationmark")
@@ -126,8 +163,8 @@ private struct ParticleSphere: View, @MainActor Animatable {
     var time: Double
     var level: Double
     var processing: Double
-    var notice: Bool
-    var complete: Bool
+    var palette: Palette
+    var pulse: Double
 
     var animatableData: AnimatablePair<Double, Double> {
         get { AnimatablePair(level, processing) }
@@ -159,7 +196,7 @@ private struct ParticleSphere: View, @MainActor Animatable {
             let cosY = cos(angle), sinY = sin(angle)
             let cosX = cos(0.32), sinX = sin(0.32)
             let contraction = processing * (0.22 + 0.12 * sin(time * 2.6 + 1))
-            let radius = 12.0 * (1 + 0.0125 * sin(time * 1.1) + voice * 0.16 - contraction)
+            let radius = 12.0 * (1 + 0.0125 * sin(time * 1.1) + voice * 0.16 - contraction + pulse * 0.22)
             // The maximum ripple and dot radius stay within the 36-point canvas.
             for point in Self.points {
                 let x = point.x * cosY - point.z * sinY
@@ -175,17 +212,8 @@ private struct ParticleSphere: View, @MainActor Animatable {
                 let rect = CGRect(x: size.width / 2 + x * distance - dot,
                                   y: size.height / 2 + y * distance - dot,
                                   width: dot * 2, height: dot * 2)
-                let tone = point.tone
-                let color: Color
-                if notice {
-                    color = Color(red: 1, green: 0.55 + tone * 0.25, blue: 0.2)
-                } else if complete {
-                    color = Color(red: 0.35, green: 0.9, blue: 0.7 + tone * 0.25)
-                } else {
-                    color = Color(red: (240 - 111 * tone) / 255,
-                                  green: (171 - 31 * tone) / 255,
-                                  blue: (252 - 4 * tone) / 255)
-                }
+                let rgb = palette.from + (palette.to - palette.from) * point.tone
+                let color = Color(red: rgb.x, green: rgb.y, blue: rgb.z)
                 context.fill(Path(ellipseIn: rect), with: .color(color.opacity(0.16 + depth * depth * 0.84)))
             }
         }
