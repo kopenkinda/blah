@@ -327,16 +327,30 @@ struct SettingsView: View {
                 Text("macOS sounds when recording starts and stops. Volume is relative to your Mac's output level.")
             }
             Section("Recording indicator") {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Orb position")
-                        Text(preferences.orbPosition.label).font(.caption).foregroundStyle(.secondary)
+                Picker("Style", selection: $preferences.indicatorStyle) {
+                    Text("Orb").tag(IndicatorStyle.orb)
+                    Text("Notch").tag(IndicatorStyle.notch)
+                }
+                .onChange(of: preferences.indicatorStyle) { controller.previewOrb() }
+                if preferences.indicatorStyle == .orb {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Orb position")
+                            Text(preferences.orbPosition.label).font(.caption).foregroundStyle(.secondary)
+                            Button("Preview") { controller.previewOrb() }
+                        }
+                        Spacer()
+                        OrbPositionPicker(selection: $preferences.orbPosition) { controller.previewOrb() }
+                    }
+                } else {
+                    LabeledContent("Grows out of the notch, with a word for what Blah is doing.") {
                         Button("Preview") { controller.previewOrb() }
                     }
-                    Spacer()
-                    OrbPositionPicker(selection: $preferences.orbPosition) { controller.previewOrb() }
+                    .font(.callout)
                 }
-                Text("Appears on the display containing your pointer.").font(.caption).foregroundStyle(.secondary)
+                Text(preferences.indicatorStyle == .orb ? "Appears on the display containing your pointer."
+                     : "Appears on the display containing your pointer. Displays without a notch show it at the top center.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
     }

@@ -15,7 +15,7 @@ instructions below describe macOS.
 
 - Hold your dictation key to record. Release to transcribe and paste.
 - Double-tap to record hands-free. Tap again to finish. Escape cancels.
-- The orb shows what Blah is doing: violet while listening, cyan once it transcribes as you speak, blue while transcribing, amber while formatting, green when pasting, and red-orange for a problem.
+- Choose the orb or the Notch style in General. Notch grows the MacBook notch downward, in black, with one word for the current state. The colors show what Blah is doing: violet while listening, cyan once it transcribes as you speak, blue while transcribing, amber while formatting, green when pasting, and red-orange for a problem.
 - Left-click the menu bar icon to paste the last transcription or quit. Right-click for Settings.
 - In General, click your dictation key and press a replacement. Letters, numbers, and standalone modifiers work too. Choose models, formatting, orb position, and launch at login there.
 - Arrange microphones by priority. Blah uses the first available one, remembers disconnected microphones, and adds new ones at the bottom.

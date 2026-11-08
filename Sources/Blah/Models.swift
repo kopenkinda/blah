@@ -74,6 +74,11 @@ struct CleanupOptions: Codable, Sendable {
     }
 }
 
+/// How Blah shows that it is listening and working.
+enum IndicatorStyle: String, CaseIterable, Codable {
+    case orb, notch
+}
+
 enum OrbPosition: Int, CaseIterable, Codable {
     case topLeft, top, topRight, left, center, right, bottomLeft, bottom, bottomRight
 
@@ -95,6 +100,7 @@ final class Preferences {
     var speechModel: String { didSet { save() } }
     var speechLanguage: String { didSet { save() } }
     var orbPosition: OrbPosition { didSet { save() } }
+    var indicatorStyle: IndicatorStyle { didSet { save() } }
     var startSound: RecordingSound { didSet { save() } }
     var stopSound: RecordingSound { didSet { save() } }
     var startSoundVolume: Double { didSet { save() } }
@@ -112,6 +118,7 @@ final class Preferences {
         var speechModel: String?
         var speechLanguage: String?
         var orbPosition: OrbPosition?
+        var indicatorStyle: IndicatorStyle?
         var soundPack: String?
         var startSound: RecordingSound?
         var stopSound: RecordingSound?
@@ -132,6 +139,7 @@ final class Preferences {
             replacements = saved.replacements ?? []
             modelDirectory = saved.modelDirectory
             orbPosition = saved.orbPosition ?? .bottom
+            indicatorStyle = saved.indicatorStyle ?? .orb
             // Migrate the original paired sound setting without resetting other preferences.
             let legacySounds: (RecordingSound, RecordingSound)
             switch saved.soundPack {
@@ -153,6 +161,7 @@ final class Preferences {
             cleanup = CleanupOptions()
             replacements = []
             orbPosition = .bottom
+            indicatorStyle = .orb
             startSound = .off
             stopSound = .off
             startSoundVolume = 0.3
@@ -164,7 +173,7 @@ final class Preferences {
     }
 
     private func save() {
-        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, replacements: replacements, modelDirectory: modelDirectory, speechModel: speechModel, speechLanguage: speechLanguage, orbPosition: orbPosition, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume, unloadAfterMinutes: unloadAfterMinutes)
+        let saved = Saved(microphonePriority: microphonePriority, key: key, cleanup: cleanup, replacements: replacements, modelDirectory: modelDirectory, speechModel: speechModel, speechLanguage: speechLanguage, orbPosition: orbPosition, indicatorStyle: indicatorStyle, startSound: startSound, stopSound: stopSound, startSoundVolume: startSoundVolume, stopSoundVolume: stopSoundVolume, unloadAfterMinutes: unloadAfterMinutes)
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: "preferences")
         }

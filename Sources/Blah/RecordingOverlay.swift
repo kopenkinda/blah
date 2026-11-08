@@ -5,7 +5,7 @@ import SwiftUI
 final class RecordingOverlay {
     private let panel: NSPanel
     private weak var controller: DictationController?
-    private var displayedNotice: String?
+    private var displayed: String?
 
     init(controller: DictationController) {
         self.controller = controller
@@ -26,17 +26,24 @@ final class RecordingOverlay {
         let screen = (panel.isVisible ? panel.screen : nil)
             ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
             ?? NSScreen.main
+        let notch = controller.preferences.indicatorStyle == .notch ? screen.map(Self.notchSize) : nil
+        let layout = "\(controller.overlayNotice ?? "")|\(String(describing: notch))"
         let host: NSHostingView<RecordingIndicator>
-        if let existing = panel.contentView as? NSHostingView<RecordingIndicator>,
-           displayedNotice == controller.overlayNotice {
+        if let existing = panel.contentView as? NSHostingView<RecordingIndicator>, displayed == layout {
             host = existing
         } else {
-            host = NSHostingView(rootView: RecordingIndicator(controller: controller))
+            host = NSHostingView(rootView: RecordingIndicator(controller: controller, notch: notch))
             panel.contentView = host
-            displayedNotice = controller.overlayNotice
+            displayed = layout
         }
         let size = host.fittingSize
-        if let screen {
+        if let screen, notch != nil {
+            // Above the menu bar, so the shape can grow out of the notch.
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
+            panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
+                                  width: size.width, height: size.height), display: true)
+        } else if let screen {
+            panel.level = .floating
             let bounds = screen.visibleFrame.insetBy(dx: 16, dy: 16)
             let position = controller.preferences.orbPosition
             panel.setFrame(NSRect(
@@ -48,6 +55,14 @@ final class RecordingOverlay {
         panel.orderFrontRegardless()
     }
 
+    /// The notch's size, or a notch-like area in the menu bar on displays without one.
+    private static func notchSize(on screen: NSScreen) -> CGSize {
+        if screen.safeAreaInsets.top > 0, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+            return CGSize(width: screen.frame.width - left.width - right.width, height: screen.safeAreaInsets.top)
+        }
+        return CGSize(width: 180, height: max(24, screen.frame.maxY - screen.visibleFrame.maxY))
+    }
+
     func hide() {
         panel.orderOut(nil)
         // Stop the animation schedule while the app is idle.
@@ -57,6 +72,7 @@ final class RecordingOverlay {
 
 private struct RecordingIndicator: View {
     var controller: DictationController
+    var notch: CGSize?
 
     private var alignment: HorizontalAlignment {
         switch controller.preferences.orbPosition.column {
@@ -67,6 +83,10 @@ private struct RecordingIndicator: View {
     }
 
     var body: some View {
+        if let notch { NotchIndicator(controller: controller, notch: notch) } else { orb }
+    }
+
+    private var orb: some View {
         VStack(alignment: alignment, spacing: 6) {
             RecordingOrb(controller: controller)
                 .padding(.horizontal, 10)
@@ -84,6 +104,92 @@ private struct RecordingIndicator: View {
             }
         }
         .fixedSize()
+    }
+}
+
+/// The notch, grown downward in black, with the particle sphere and one word for the state.
+private struct NotchIndicator: View {
+    var controller: DictationController
+    var notch: CGSize
+    @State private var open = false
+    private let ear: CGFloat = 8
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                RecordingOrb(controller: controller)
+                    .scaleEffect(0.72)
+                    .frame(width: 26, height: 26)
+                Text(controller.indicatorWord)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: controller.indicatorWord)
+            }
+            if let notice = controller.overlayNotice {
+                Text(notice)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 300, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .opacity(open ? 1 : 0)
+        .frame(minWidth: notch.width)
+        .padding(.top, notch.height)
+        .padding(.horizontal, ear)
+        .background {
+            NotchShape(ear: ear, radius: 16).fill(.black)
+                .scaleEffect(x: 1, y: open ? 1 : 0.55, anchor: .top)
+        }
+        .fixedSize()
+        .onAppear { withAnimation(.spring(duration: 0.35, bounce: 0.15)) { open = true } }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(controller.overlayNotice ?? controller.status)
+    }
+}
+
+/// A notch outline: flush with the top edge, curving inward at the top corners and rounded at the bottom.
+private struct NotchShape: Shape {
+    var ear: CGFloat
+    var radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height, r = min(radius, (h - ear) / 2)
+        var path = Path()
+        path.move(to: .zero)
+        path.addLine(to: CGPoint(x: w, y: 0))
+        path.addQuadCurve(to: CGPoint(x: w - ear, y: ear), control: CGPoint(x: w - ear, y: 0))
+        path.addLine(to: CGPoint(x: w - ear, y: h - r))
+        path.addQuadCurve(to: CGPoint(x: w - ear - r, y: h), control: CGPoint(x: w - ear, y: h))
+        path.addLine(to: CGPoint(x: ear + r, y: h))
+        path.addQuadCurve(to: CGPoint(x: ear, y: h - r), control: CGPoint(x: ear, y: h))
+        path.addLine(to: CGPoint(x: ear, y: ear))
+        path.addQuadCurve(to: .zero, control: CGPoint(x: ear, y: 0))
+        path.closeSubpath()
+        return path
+    }
+}
+
+extension DictationController {
+    fileprivate var indicatorRecording: Bool { captureVisible || (previewingOrb && stage == nil) }
+
+    fileprivate var indicatorPalette: Palette {
+        if overlayNotice != nil { return .notice }
+        if indicatorRecording { return transcribingLive ? .live : .listening }
+        switch stage {
+        case "Formatting": return .formatting
+        case "Pasting": return .pasting
+        default: return .transcribing
+        }
+    }
+
+    /// One word for the notch.
+    fileprivate var indicatorWord: String {
+        if overlayNotice != nil { return "Problem" }
+        if indicatorRecording { return transcribingLive ? "Live" : mode == .locked ? "Hands-free" : "Listening" }
+        return stage ?? "Transcribing"
     }
 }
 
@@ -111,17 +217,9 @@ private struct RecordingOrb: View {
     @State private var previous = Palette.listening
     @State private var changedAt = Date.distantPast
 
-    private var recording: Bool { controller.captureVisible || (controller.previewingOrb && controller.stage == nil) }
+    private var recording: Bool { controller.indicatorRecording }
     private var showingNotice: Bool { controller.overlayNotice != nil }
-    private var palette: Palette {
-        if showingNotice { return .notice }
-        if recording { return controller.transcribingLive ? .live : .listening }
-        switch controller.stage {
-        case "Formatting": return .formatting
-        case "Pasting": return .pasting
-        default: return .transcribing
-        }
-    }
+    private var palette: Palette { controller.indicatorPalette }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { timeline in
